@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from evals.run_ragas import evaluate_dataset, load_dataset, load_quality_threshold, quality_gate
+from evals.run_ragas import evaluate_dataset, load_dataset, load_quality_threshold, quality_gate, score_case
 
 
 GOLDEN_DATASET = Path(__file__).resolve().parents[1] / "evals" / "golden.jsonl"
@@ -55,6 +55,27 @@ def test_offline_eval_reports_quality_metrics():
     assert metrics["context_precision"] == 1.0
     assert metrics["answer_relevance"] == 1.0
     assert metrics["citation_coverage"] == 1.0
+    assert len(metrics["case_scores"]) == metrics["total_cases"]
+
+
+def test_score_case_measures_grounded_answer_quality():
+    grounded = {
+        "id": "grounded",
+        "question": "What is a workflow?",
+        "expected_answer": "A workflow is an automated process.",
+        "expected_evidence": "A workflow is a configurable automated process.",
+        "expected_citations": ["docs:p0:c0"],
+        "verified": True,
+    }
+    ungrounded = {
+        **grounded,
+        "id": "ungrounded",
+        "expected_evidence": "",
+        "expected_citations": [],
+    }
+
+    assert score_case(grounded)["faithfulness"] == 1.0
+    assert score_case(ungrounded)["faithfulness"] == 0.0
 
 
 def test_quality_gate_passes_or_fails_against_threshold():

@@ -10,6 +10,30 @@ DEFAULT_DATASET = Path(__file__).resolve().parent / "golden.jsonl"
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "settings.toml"
 
 
+def _normalize(text: str) -> set[str]:
+    return {token.strip(".,;:!?()[]").lower() for token in text.split() if token.strip(".,;:!?()[]")}
+
+
+def score_case(case: dict) -> dict:
+    expected_answer_terms = _normalize(case.get("expected_answer", ""))
+    evidence_terms = _normalize(case.get("expected_evidence", ""))
+    answer_supported = bool(expected_answer_terms and expected_answer_terms & evidence_terms)
+    has_citations = bool(case.get("expected_citations"))
+    verified = case.get("verified") is True
+
+    faithfulness = 1.0 if verified and answer_supported and has_citations else 0.0
+    answer_relevance = 1.0 if case.get("question") and case.get("expected_answer") else 0.0
+    context_precision = 1.0 if case.get("expected_evidence") and has_citations else 0.0
+
+    return {
+        "id": case.get("id"),
+        "faithfulness": faithfulness,
+        "answer_relevance": answer_relevance,
+        "context_precision": context_precision,
+        "citation_coverage": 1.0 if has_citations else 0.0,
+    }
+
+
 def load_dataset(path: str | Path = DEFAULT_DATASET) -> list[dict]:
     path = Path(path)
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -26,18 +50,21 @@ def evaluate_dataset(cases: list[dict]) -> dict:
             "answer_relevance": 0.0,
         }
 
+    case_scores = [score_case(case) for case in cases]
+
+    def average(metric: str) -> float:
+        return sum(case[metric] for case in case_scores) / total
+
     verified = sum(1 for case in cases if case.get("verified") is True)
-    with_evidence = sum(1 for case in cases if case.get("expected_evidence"))
-    with_citations = sum(1 for case in cases if case.get("expected_citations"))
-    with_answers = sum(1 for case in cases if case.get("expected_answer"))
 
     return {
         "total_cases": total,
         "verified_cases": verified,
-        "faithfulness": verified / total,
-        "context_precision": with_evidence / total,
-        "answer_relevance": with_answers / total,
-        "citation_coverage": with_citations / total,
+        "faithfulness": average("faithfulness"),
+        "context_precision": average("context_precision"),
+        "answer_relevance": average("answer_relevance"),
+        "citation_coverage": average("citation_coverage"),
+        "case_scores": case_scores,
     }
 
 
@@ -64,6 +91,15 @@ def print_report(metrics: dict, min_faithfulness: float | None = None) -> None:
     print(f"context_precision={metrics['context_precision']:.2f}")
     print(f"answer_relevance={metrics['answer_relevance']:.2f}")
     print(f"citation_coverage={metrics['citation_coverage']:.2f}")
+    print("case_scores:")
+    for case in metrics.get("case_scores", []):
+        print(
+            "- "
+            f"id={case['id']} "
+            f"faithfulness={case['faithfulness']:.2f} "
+            f"context_precision={case['context_precision']:.2f} "
+            f"answer_relevance={case['answer_relevance']:.2f}"
+        )
 
 
 def parse_args():

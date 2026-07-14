@@ -14,3 +14,17 @@ Each line is one JSON object with these fields:
 
 The initial dataset is intentionally small. Grow it toward 50-200 verified
 examples as more source documents and failure cases are added.
+
+## Running Offline Evaluation
+
+Run:
+
+```bash
+python evals/run_ragas.py --config configs/settings.toml
+```
+
+The script reads `golden.jsonl`, scores each case, prints faithfulness as the
+primary metric, and also reports context precision, answer relevance, and
+citation coverage. The current implementation is deterministic and dependency
+light so it can run in CI; the metric names and report shape are compatible with
+a later full Ragas-backed evaluator.
