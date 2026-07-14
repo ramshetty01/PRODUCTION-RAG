@@ -30,8 +30,9 @@ tests.
 
 ## CI
 
-Pull requests run the test suite through `.github/workflows/rag-eval.yml` and
-then execute the offline RAG evaluation gate.
+Pull requests run the full `python -m pytest` suite through
+`.github/workflows/rag-eval.yml` and then execute the offline RAG evaluation
+gate.
 
 ## Adding Tests
 
