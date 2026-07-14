@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from src.rag.auth import AuthContext, authenticate_api_key, parse_api_keys
+from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_token_summary, count_tokens
 from src.rag.config import load_settings
 from src.rag.generation import generate_answer
@@ -100,9 +100,20 @@ QUERY_CACHE = QueryCache()
 RATE_LIMITER = RateLimiter(max_requests=120, window_seconds=60)
 
 
-def _auth_context(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> AuthContext:
+def _auth_context(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> AuthContext:
     try:
-        return authenticate_api_key(x_api_key, AUTH_CONTEXTS)
+        return authenticate_request(
+            SETTINGS.auth_mode,
+            api_key=x_api_key,
+            authorization_header=authorization,
+            configured_keys=AUTH_CONTEXTS,
+            jwt_secret=SETTINGS.jwt_secret,
+            jwt_issuer=SETTINGS.jwt_issuer,
+            jwt_audience=SETTINGS.jwt_audience,
+        )
     except PermissionError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 

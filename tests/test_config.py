@@ -39,7 +39,11 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_RERANKER_PROVIDER=cross_encoder",
                 "RAG_RERANKER_MODEL=cross-encoder/test",
                 "RAG_RERANKER_ALLOW_FALLBACK=false",
+                "RAG_AUTH_MODE=jwt",
                 "RAG_API_KEYS=public-key:public,admin-key:public|admin:tenant-a",
+                "RAG_JWT_SECRET=secret",
+                "RAG_JWT_ISSUER=issuer",
+                "RAG_JWT_AUDIENCE=rag-api",
             ]
         ),
         encoding="utf-8",
@@ -57,6 +61,10 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.reranker_model == "cross-encoder/test"
     assert settings.reranker_allow_fallback is False
     assert settings.api_keys == "public-key:public,admin-key:public|admin:tenant-a"
+    assert settings.auth_mode == "jwt"
+    assert settings.jwt_secret == "secret"
+    assert settings.jwt_issuer == "issuer"
+    assert settings.jwt_audience == "rag-api"
 
 
 def test_env_example_documents_required_runtime_settings():
@@ -68,4 +76,6 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_RETRIEVAL_MODE=" in env_example
     assert "RAG_LLM_PROVIDER=" in env_example
     assert "RAG_RERANKER_PROVIDER=" in env_example
+    assert "RAG_AUTH_MODE=" in env_example
     assert "RAG_API_KEYS=" in env_example
+    assert "RAG_JWT_SECRET=" in env_example

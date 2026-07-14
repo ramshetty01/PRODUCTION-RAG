@@ -31,6 +31,10 @@ class RuntimeSettings:
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_allow_fallback: bool = True
     api_keys: str = ""
+    auth_mode: str = "auto"
+    jwt_secret: str = ""
+    jwt_issuer: str = ""
+    jwt_audience: str = ""
 
 
 def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
@@ -87,4 +91,8 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         ),
         reranker_allow_fallback=_setting_bool(dotenv_values, "RAG_RERANKER_ALLOW_FALLBACK", True),
         api_keys=_setting_value(dotenv_values, "RAG_API_KEYS", ""),
+        auth_mode=_setting_value(dotenv_values, "RAG_AUTH_MODE", "auto"),
+        jwt_secret=_setting_value(dotenv_values, "RAG_JWT_SECRET", ""),
+        jwt_issuer=_setting_value(dotenv_values, "RAG_JWT_ISSUER", ""),
+        jwt_audience=_setting_value(dotenv_values, "RAG_JWT_AUDIENCE", ""),
     )
