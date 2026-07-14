@@ -75,6 +75,11 @@ Copy `.env.example` for runtime settings if needed. The main committed config is
 `configs/settings.toml`, which stores evaluation thresholds, latency budgets,
 and cost defaults.
 
+Runtime environment variables are loaded by `src.rag.config.load_settings`.
+Local `.env` files are ignored by Git; `.env.example` documents safe placeholder
+values for vector database path, manifest path, embedding model, chunk size,
+chunk overlap, Top K, and optional LLM provider settings.
+
 ## Project Status
 
 Implemented:

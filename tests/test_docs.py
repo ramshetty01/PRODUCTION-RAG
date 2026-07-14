@@ -23,3 +23,12 @@ def test_testing_strategy_documents_baseline_test_command():
     assert "Chunking" in testing
     assert "Chroma persistence" in testing
     assert ".github/workflows/rag-eval.yml" in testing
+
+
+def test_readme_documents_runtime_configuration():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert ".env.example" in readme
+    assert "src.rag.config.load_settings" in readme
+    assert "chunk size" in readme
+    assert "optional LLM provider" in readme
