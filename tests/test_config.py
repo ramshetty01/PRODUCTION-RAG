@@ -9,6 +9,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_CHUNK_OVERLAP",
         "RAG_LLM_PROVIDER",
         "RAG_RERANKER_PROVIDER",
+        "RAG_API_KEYS",
     ]:
         monkeypatch.delenv(key, raising=False)
 
@@ -20,6 +21,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.chunk_overlap == 100
     assert settings.llm_provider == "extractive"
     assert settings.reranker_provider == "lexical"
+    assert settings.api_keys == ""
 
 
 def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
@@ -37,6 +39,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_RERANKER_PROVIDER=cross_encoder",
                 "RAG_RERANKER_MODEL=cross-encoder/test",
                 "RAG_RERANKER_ALLOW_FALLBACK=false",
+                "RAG_API_KEYS=public-key:public,admin-key:public|admin:tenant-a",
             ]
         ),
         encoding="utf-8",
@@ -53,6 +56,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.reranker_provider == "cross_encoder"
     assert settings.reranker_model == "cross-encoder/test"
     assert settings.reranker_allow_fallback is False
+    assert settings.api_keys == "public-key:public,admin-key:public|admin:tenant-a"
 
 
 def test_env_example_documents_required_runtime_settings():
@@ -64,3 +68,4 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_RETRIEVAL_MODE=" in env_example
     assert "RAG_LLM_PROVIDER=" in env_example
     assert "RAG_RERANKER_PROVIDER=" in env_example
+    assert "RAG_API_KEYS=" in env_example
