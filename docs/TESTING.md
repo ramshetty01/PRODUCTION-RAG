@@ -38,7 +38,9 @@ gate.
 
 Dependency or container changes also run `.github/workflows/security-scan.yml`.
 That workflow audits Python dependencies with `pip-audit` and scans the
-repository, including the Dockerfile, with Trivy.
+repository, including the Dockerfile, with Trivy. The workflow uploads JSON
+reports as artifacts so the current security baseline is visible during
+dependency and container changes.
 
 Run the same scans locally before changing production dependencies or container
 settings:

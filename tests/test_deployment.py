@@ -35,6 +35,9 @@ def test_security_scan_workflow_audits_dependencies_and_container_surface():
 
     assert "pip-audit==2.7.3" in workflow
     assert "pip-audit -r requirements.txt" in workflow
-    assert "aquasecurity/trivy-action@0.24.0" in workflow
+    assert "pip-audit-report.json" in workflow
+    assert "aquasecurity/trivy-action@v0.36.0" in workflow
     assert "scan-type: fs" in workflow
     assert "severity: CRITICAL,HIGH" in workflow
+    assert "trivy-report.json" in workflow
+    assert "actions/upload-artifact@v4" in workflow
