@@ -116,3 +116,27 @@ def test_query_endpoint_returns_clean_json_errors(monkeypatch):
     body = response.json()
     assert body["detail"]["message"] == "vector store missing"
     assert body["detail"]["trace"]["error"] == "RuntimeError"
+
+
+def test_feedback_and_monitoring_endpoints(tmp_path):
+    client = TestClient(routes.create_app())
+    feedback_path = tmp_path / "feedback.jsonl"
+
+    response = client.post(
+        "/feedback",
+        json={
+            "request_id": "req-1",
+            "query": "What is a runner?",
+            "answer": "A runner executes jobs. [docs:p2:c3]",
+            "helpful": True,
+            "citations": ["docs:p2:c3"],
+            "latency_ms": 10.0,
+            "feedback_path": str(feedback_path),
+        },
+    )
+    metrics = client.get("/monitoring", params={"feedback_path": str(feedback_path)})
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "recorded", "request_id": "req-1"}
+    assert metrics.status_code == 200
+    assert metrics.json()["metrics"]["helpful_rate"] == 1.0
