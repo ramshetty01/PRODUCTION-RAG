@@ -7,6 +7,7 @@ from src.rag.citations import (
     format_context_with_citations,
 )
 from src.rag.llm.client import ExtractiveLLMClient
+from src.rag.models import get_model_provider
 from src.rag.prompts import PromptBundle, build_prompt_from_bundle, load_prompt_bundle
 
 REFUSAL_ANSWER = "The answer is not available in the retrieved context."
@@ -45,7 +46,9 @@ def generate_answer(query: str, chunks, llm=None, prompts: PromptBundle | None =
     if not chunks:
         return _refusal_response(prompts.refusal)
 
-    llm = llm or ExtractiveLLMClient(fallback=prompts.refusal)
+    llm = llm or get_model_provider().llm()
+    if isinstance(llm, ExtractiveLLMClient):
+        llm.fallback = prompts.refusal
     prompt = build_rag_prompt(query, chunks, prompts=prompts)
     answer = llm.generate(prompt)
     response = enforce_grounded_answer(answer, chunks, refusal_answer=prompts.refusal)

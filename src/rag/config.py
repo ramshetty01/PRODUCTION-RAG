@@ -28,32 +28,42 @@ class RuntimeSettings:
     llm_api_key: str = ""
 
 
-def load_dotenv(path: str | Path = ".env") -> None:
+def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
     path = Path(path)
     if not path.exists():
-        return
+        return {}
+    values = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _setting_value(dotenv_values: dict[str, str], name: str, default: str) -> str:
+    return os.getenv(name) or dotenv_values.get(name) or default
+
+
+def _setting_int(dotenv_values: dict[str, str], name: str, default: int) -> int:
+    value = os.getenv(name) or dotenv_values.get(name)
+    return int(value) if value not in (None, "") else default
 
 
 def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
-    if dotenv_path:
-        load_dotenv(dotenv_path)
+    dotenv_values = load_dotenv(dotenv_path) if dotenv_path else {}
     return RuntimeSettings(
-        host=os.getenv("RAG_HOST", "0.0.0.0"),
-        port=_env_int("RAG_PORT", 8000),
-        vector_db_path=os.getenv("RAG_VECTOR_DB_PATH", str(DEFAULT_DB_PATH)),
-        manifest_path=os.getenv("RAG_MANIFEST_PATH", "data/processed/ingestion_manifest.json"),
-        embedding_model=os.getenv("RAG_EMBEDDING_MODEL", EMBEDDING_MODEL),
-        chunk_size=_env_int("RAG_CHUNK_SIZE", DEFAULT_CHUNK_TOKENS),
-        chunk_overlap=_env_int("RAG_CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP_TOKENS),
-        top_k=_env_int("RAG_TOP_K", 4),
-        log_level=os.getenv("RAG_LOG_LEVEL", "INFO"),
-        llm_provider=os.getenv("RAG_LLM_PROVIDER", "extractive"),
-        llm_model=os.getenv("RAG_LLM_MODEL", ""),
-        llm_api_key=os.getenv("RAG_LLM_API_KEY", ""),
+        host=_setting_value(dotenv_values, "RAG_HOST", "0.0.0.0"),
+        port=_setting_int(dotenv_values, "RAG_PORT", 8000),
+        vector_db_path=_setting_value(dotenv_values, "RAG_VECTOR_DB_PATH", str(DEFAULT_DB_PATH)),
+        manifest_path=_setting_value(dotenv_values, "RAG_MANIFEST_PATH", "data/processed/ingestion_manifest.json"),
+        embedding_model=_setting_value(dotenv_values, "RAG_EMBEDDING_MODEL", EMBEDDING_MODEL),
+        chunk_size=_setting_int(dotenv_values, "RAG_CHUNK_SIZE", DEFAULT_CHUNK_TOKENS),
+        chunk_overlap=_setting_int(dotenv_values, "RAG_CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP_TOKENS),
+        top_k=_setting_int(dotenv_values, "RAG_TOP_K", 4),
+        log_level=_setting_value(dotenv_values, "RAG_LOG_LEVEL", "INFO"),
+        llm_provider=_setting_value(dotenv_values, "RAG_LLM_PROVIDER", "extractive"),
+        llm_model=_setting_value(dotenv_values, "RAG_LLM_MODEL", ""),
+        llm_api_key=_setting_value(dotenv_values, "RAG_LLM_API_KEY", ""),
     )
