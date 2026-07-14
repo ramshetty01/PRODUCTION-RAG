@@ -1,6 +1,7 @@
 import pytest
 
-from src.rag.performance import QueryCache, call_with_retries, check_latency_budget, estimate_llm_cost
+from src.rag.performance import QueryCache, build_query_cache, call_with_retries, check_latency_budget, estimate_llm_cost
+from src.rag.security import RateLimiter, build_rate_limiter
 
 
 def test_query_cache_uses_query_top_k_and_filters():
@@ -9,6 +10,18 @@ def test_query_cache_uses_query_top_k_and_filters():
 
     assert cache.get("what is a runner", 2, {"document_id": "docs"}) == {"answer": "cached"}
     assert cache.get("what is a runner", 1, {"document_id": "docs"}) is None
+
+
+def test_cache_and_rate_limiter_backend_factories_default_to_memory():
+    assert isinstance(build_query_cache("memory"), QueryCache)
+    assert isinstance(build_rate_limiter("memory"), RateLimiter)
+
+
+def test_redis_backends_require_url():
+    with pytest.raises(ValueError, match="redis_url is required"):
+        build_query_cache("redis")
+    with pytest.raises(ValueError, match="redis_url is required"):
+        build_rate_limiter("redis")
 
 
 def test_latency_budget_and_cost_estimate():
