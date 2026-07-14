@@ -78,7 +78,18 @@ and cost defaults.
 Runtime environment variables are loaded by `src.rag.config.load_settings`.
 Local `.env` files are ignored by Git; `.env.example` documents safe placeholder
 values for vector database path, manifest path, embedding model, chunk size,
-chunk overlap, Top K, and optional LLM provider settings.
+chunk overlap, Top K, retrieval mode, and optional LLM/reranker provider
+settings.
+
+Supported query retrieval modes are `semantic`, `exact`, `hybrid`, `sparse`,
+and `reranked`. Set the default with `RAG_RETRIEVAL_MODE`, or override it per API
+request:
+
+```bash
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What does a runner do?","retrieval_mode":"hybrid","top_k":4}'
+```
 
 ## Project Status
 

@@ -56,6 +56,7 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["answer"] == "A runner executes jobs. [docs:p2:c3]"
     assert body["citations"][0]["id"] == "docs:p2:c3"
     assert body["retrieval"] == {
+        "mode": "semantic",
         "top_k": 2,
         "returned_chunks": 1,
         "chunk_ids": ["docs:p2:c3"],
@@ -122,6 +123,32 @@ def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["retrieval"]["chunk_ids"] == ["secret:p0:c0"]
+
+
+def test_query_endpoint_supports_exact_retrieval_mode(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/query",
+        json={"query": "runner", "top_k": 2, "retrieval_mode": "exact"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["retrieval"]["mode"] == "exact"
+    assert body["retrieval"]["chunk_ids"] == ["docs:p2:c3"]
+
+
+def test_query_endpoint_rejects_unknown_retrieval_mode():
+    routes.QUERY_CACHE.values.clear()
+    client = TestClient(routes.create_app())
+
+    response = client.post("/query", json={"query": "runner", "retrieval_mode": "unknown"})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Unsupported retrieval mode: unknown"}
 
 
 def test_query_endpoint_returns_clean_json_errors(monkeypatch):

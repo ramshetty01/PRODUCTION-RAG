@@ -122,16 +122,51 @@ def retrieve_by_mode(
     vectorstore=None,
     documents=None,
     top_k: int = DEFAULT_TOP_K,
+    reranker=None,
+    metadata_filters: dict | None = None,
+    user_roles=None,
 ):
     documents = documents or []
     if mode == "exact":
-        return retrieve_exact_chunks(query, documents, top_k=top_k)
+        return retrieve_exact_chunks(
+            query,
+            documents,
+            top_k=top_k,
+            metadata_filters=metadata_filters,
+            user_roles=user_roles,
+        )
     if mode == "semantic":
-        return retrieve_chunks(query, vectorstore, top_k=top_k)
+        return retrieve_chunks(
+            query,
+            vectorstore,
+            top_k=top_k,
+            metadata_filters=metadata_filters,
+            user_roles=user_roles,
+        )
     if mode == "hybrid":
-        return retrieve_hybrid_chunks(query, vectorstore, documents, top_k=top_k)
+        return retrieve_hybrid_chunks(
+            query,
+            vectorstore,
+            documents,
+            top_k=top_k,
+            metadata_filters=metadata_filters,
+            user_roles=user_roles,
+        )
     if mode == "sparse":
-        return retrieve_sparse_chunks(query, documents, top_k=top_k)
+        return retrieve_sparse_chunks(
+            query,
+            documents,
+            top_k=top_k,
+            metadata_filters=metadata_filters,
+            user_roles=user_roles,
+        )
+    if mode == "reranked":
+        candidates = retrieve_reranked_chunks(query, vectorstore, documents, top_k=top_k, reranker=reranker)
+        return filter_authorized_chunks(
+            candidates,
+            metadata_filters=metadata_filters,
+            user_roles=user_roles,
+        )[:top_k]
     raise ValueError(f"Unsupported retrieval mode: {mode}")
 
 

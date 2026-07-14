@@ -12,12 +12,14 @@ from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ing
 from src.rag.monitoring import DEFAULT_FEEDBACK_LOG, FeedbackEvent, append_feedback, load_feedback, monitoring_metrics
 from src.rag.observability import TraceEvent, chunk_ids, citation_ids, new_request_id, trace_latency
 from src.rag.performance import QueryCache, estimate_llm_cost
-from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_chunks
+from src.rag.reranking import build_reranker
+from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode
 from src.rag.security import RateLimiter, validate_query
 from src.rag.vector_store import build_chroma_db, count_records
 
 
 SETTINGS = load_settings()
+SUPPORTED_RETRIEVAL_MODES = {"semantic", "exact", "hybrid", "sparse", "reranked"}
 
 
 class HealthResponse(BaseModel):
@@ -46,6 +48,7 @@ class IngestResponse(BaseModel):
 class QueryRequest(BaseModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=SETTINGS.top_k, gt=0)
+    retrieval_mode: str = Field(default=SETTINGS.retrieval_mode)
     persist_dir: str = Field(default=SETTINGS.vector_db_path)
     metadata_filters: dict | None = None
     user_roles: list[str] = Field(default_factory=lambda: ["public"])
@@ -92,6 +95,36 @@ class MonitoringResponse(BaseModel):
 router = APIRouter()
 QUERY_CACHE = QueryCache()
 RATE_LIMITER = RateLimiter(max_requests=120, window_seconds=60)
+
+
+def _candidate_documents(vectorstore, query: str, top_k: int):
+    return vectorstore.similarity_search(query, k=max(top_k * 4, top_k))
+
+
+def _retrieve_for_request(query: str, request: QueryRequest, vectorstore):
+    mode = request.retrieval_mode.lower()
+    if mode not in SUPPORTED_RETRIEVAL_MODES:
+        raise ValueError(f"Unsupported retrieval mode: {request.retrieval_mode}")
+    documents = []
+    if mode in {"exact", "hybrid", "sparse", "reranked"}:
+        documents = _candidate_documents(vectorstore, query, request.top_k)
+    reranker = None
+    if mode == "reranked":
+        reranker = build_reranker(
+            SETTINGS.reranker_provider,
+            SETTINGS.reranker_model,
+            SETTINGS.reranker_allow_fallback,
+        )
+    return mode, retrieve_by_mode(
+        query,
+        mode,
+        vectorstore=vectorstore,
+        documents=documents,
+        top_k=request.top_k,
+        reranker=reranker,
+        metadata_filters=request.metadata_filters,
+        user_roles=set(request.user_roles),
+    )
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -152,11 +185,15 @@ def query(request: QueryRequest):
         safe_query = validate_query(request.query)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    requested_mode = request.retrieval_mode.lower()
+    if requested_mode not in SUPPORTED_RETRIEVAL_MODES:
+        raise HTTPException(status_code=400, detail=f"Unsupported retrieval mode: {request.retrieval_mode}")
     if not RATE_LIMITER.allow("default"):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
 
     event = TraceEvent(request_id=request_id, query=safe_query)
-    cached_payload = QUERY_CACHE.get(safe_query, request.top_k, request.metadata_filters)
+    cache_filters = {**(request.metadata_filters or {}), "_retrieval_mode": requested_mode}
+    cached_payload = QUERY_CACHE.get(safe_query, request.top_k, cache_filters)
     if cached_payload:
         cached_payload = {**cached_payload, "request_id": request_id, "cached": True}
         cached_payload["trace"] = {**cached_payload["trace"], "request_id": request_id}
@@ -165,12 +202,10 @@ def query(request: QueryRequest):
     try:
         with trace_latency(event):
             vectorstore = load_vectorstore(request.persist_dir)
-            chunks = retrieve_chunks(
+            retrieval_mode, chunks = _retrieve_for_request(
                 safe_query,
+                request,
                 vectorstore,
-                top_k=request.top_k,
-                metadata_filters=request.metadata_filters,
-                user_roles=set(request.user_roles),
             )
             response = generate_answer(safe_query, chunks)
             event.retrieved_chunk_ids = chunk_ids(chunks)
@@ -183,6 +218,7 @@ def query(request: QueryRequest):
             "answer": response["answer"],
             "citations": response["citations"],
             "retrieval": {
+                "mode": retrieval_mode,
                 "top_k": request.top_k,
                 "returned_chunks": len(chunks),
                 "chunk_ids": [chunk.metadata.get("chunk_id") for chunk in chunks],
@@ -190,7 +226,7 @@ def query(request: QueryRequest):
             "trace": event.to_log_dict(),
             "cached": False,
         }
-        QUERY_CACHE.set(safe_query, request.top_k, payload, request.metadata_filters)
+        QUERY_CACHE.set(safe_query, request.top_k, payload, cache_filters)
         return QueryResponse(**payload)
     except Exception as exc:
         event.error = type(exc).__name__
