@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
@@ -11,7 +12,16 @@ from src.rag.config import load_settings
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
 from src.rag.monitoring import DEFAULT_FEEDBACK_LOG, FeedbackEvent, append_feedback, load_feedback, monitoring_metrics
-from src.rag.observability import TraceEvent, chunk_ids, citation_ids, new_request_id, trace_latency
+from src.rag.observability import (
+    LOGGER,
+    MetricsRegistry,
+    TraceEvent,
+    chunk_ids,
+    citation_ids,
+    new_request_id,
+    structured_request_log,
+    trace_latency,
+)
 from src.rag.performance import QueryCache, estimate_llm_cost
 from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode
@@ -98,6 +108,7 @@ class MonitoringResponse(BaseModel):
 router = APIRouter()
 QUERY_CACHE = QueryCache()
 RATE_LIMITER = RateLimiter(max_requests=120, window_seconds=60)
+METRICS = MetricsRegistry()
 
 
 def _auth_context(
@@ -294,8 +305,38 @@ def monitoring(feedback_path: str = str(DEFAULT_FEEDBACK_LOG)):
     return MonitoringResponse(metrics=monitoring_metrics(load_feedback(_safe_api_path(feedback_path))))
 
 
+@router.get("/metrics")
+def metrics():
+    return Response(METRICS.to_prometheus(), media_type="text/plain; version=0.0.4")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="Production RAG API")
+
+    @app.middleware("http")
+    async def record_request_metrics(request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or new_request_id()
+        start = time.perf_counter()
+        status_code = 500
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+            return response
+        finally:
+            latency_ms = (time.perf_counter() - start) * 1000
+            METRICS.record_request(status_code, latency_ms)
+            LOGGER.info(
+                structured_request_log(
+                    request.method,
+                    request.url.path,
+                    status_code,
+                    latency_ms,
+                    request_id,
+                )
+            )
+            if "response" in locals():
+                response.headers["X-Request-ID"] = request_id
+
     app.include_router(router)
     return app
 

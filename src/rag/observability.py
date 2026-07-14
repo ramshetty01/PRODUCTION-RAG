@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 from src.rag.citations import citation_id_for_chunk
+
+
+LOGGER = logging.getLogger("rag.api")
 
 
 def new_request_id() -> str:
@@ -48,6 +52,52 @@ def chunk_ids(chunks) -> list[str]:
 
 def citation_ids(citations: list[dict]) -> list[str]:
     return [str(citation["id"]) for citation in citations]
+
+
+@dataclass
+class MetricsRegistry:
+    request_count: int = 0
+    status_counts: dict[int, int] = field(default_factory=dict)
+    latency_ms_total: float = 0.0
+
+    def record_request(self, status_code: int, latency_ms: float) -> None:
+        self.request_count += 1
+        self.status_counts[status_code] = self.status_counts.get(status_code, 0) + 1
+        self.latency_ms_total += latency_ms
+
+    def to_prometheus(self) -> str:
+        lines = [
+            "# HELP rag_api_requests_total Total API requests handled.",
+            "# TYPE rag_api_requests_total counter",
+            f"rag_api_requests_total {self.request_count}",
+            "# HELP rag_api_request_status_total API requests by HTTP status code.",
+            "# TYPE rag_api_request_status_total counter",
+        ]
+        for status_code in sorted(self.status_counts):
+            count = self.status_counts[status_code]
+            lines.append(f'rag_api_request_status_total{{status_code="{status_code}"}} {count}')
+        lines.extend(
+            [
+                "# HELP rag_api_request_latency_ms_total Cumulative API request latency in milliseconds.",
+                "# TYPE rag_api_request_latency_ms_total counter",
+                f"rag_api_request_latency_ms_total {round(self.latency_ms_total, 3)}",
+            ]
+        )
+        return "\n".join(lines) + "\n"
+
+
+def structured_request_log(method: str, path: str, status_code: int, latency_ms: float, request_id: str) -> str:
+    return json.dumps(
+        {
+            "event": "api_request",
+            "request_id": request_id,
+            "method": method,
+            "path": path,
+            "status_code": status_code,
+            "latency_ms": round(latency_ms, 3),
+        },
+        sort_keys=True,
+    )
 
 
 @contextmanager
