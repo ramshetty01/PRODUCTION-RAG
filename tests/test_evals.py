@@ -1,7 +1,15 @@
 import json
 from pathlib import Path
 
-from evals.run_ragas import evaluate_dataset, load_dataset, load_quality_threshold, quality_gate, score_case
+from evals.run_ragas import (
+    evaluate_dataset,
+    evaluate_dataset_by_mode,
+    load_dataset,
+    load_eval_mode,
+    load_quality_threshold,
+    quality_gate,
+    score_case,
+)
 
 
 GOLDEN_DATASET = Path(__file__).resolve().parents[1] / "evals" / "golden.jsonl"
@@ -93,6 +101,23 @@ def test_quality_gate_passes_or_fails_against_threshold():
 
 def test_quality_threshold_loads_from_versioned_config(tmp_path):
     config = tmp_path / "settings.toml"
-    config.write_text("[evaluation]\nmin_faithfulness = 0.91\n", encoding="utf-8")
+    config.write_text("[evaluation]\nmin_faithfulness = 0.91\nmode = \"auto\"\n", encoding="utf-8")
 
     assert load_quality_threshold(config) == 0.91
+    assert load_eval_mode(config) == "auto"
+
+
+def test_evaluate_dataset_by_mode_preserves_deterministic_default():
+    metrics = evaluate_dataset_by_mode(load_dataset(GOLDEN_DATASET), mode="deterministic")
+
+    assert metrics["mode"] == "deterministic"
+    assert metrics["faithfulness"] == 1.0
+
+
+def test_evaluate_dataset_by_mode_rejects_unknown_mode():
+    try:
+        evaluate_dataset_by_mode([], mode="unknown")
+    except ValueError as exc:
+        assert "Unsupported evaluation mode" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")

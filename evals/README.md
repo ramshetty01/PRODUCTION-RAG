@@ -33,3 +33,22 @@ primary metric, and also reports context precision, answer relevance, and
 citation coverage. The current implementation is deterministic and dependency
 light so it can run in CI; the metric names and report shape are compatible with
 a later full Ragas-backed evaluator.
+
+## Evaluation Modes
+
+The default mode is deterministic so CI does not require model credentials:
+
+```bash
+python evals/run_ragas.py --config configs/settings.toml --mode deterministic
+```
+
+To run full Ragas metrics, install optional dependencies and configure the LLM
+and embedding credentials required by your Ragas setup:
+
+```bash
+python -m pip install ragas datasets
+python evals/run_ragas.py --config configs/settings.toml --mode ragas
+```
+
+`--mode auto` attempts the Ragas path first and falls back to deterministic
+scoring if optional dependencies are unavailable.
