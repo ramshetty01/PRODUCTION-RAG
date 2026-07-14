@@ -55,3 +55,17 @@ def test_architecture_documents_data_flow_and_interfaces():
     assert "POST /query" in architecture
     assert "chroma_db/" in architecture
     assert "python evals/run_ragas.py --config configs/settings.toml" in architecture
+
+
+def test_pr_workflow_and_template_document_issue_tracking():
+    workflow = (ROOT / "docs" / "PR_WORKFLOW.md").read_text(encoding="utf-8")
+    template = (ROOT / ".github" / "pull_request_template.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "codex/issue-<number>-<short-description>" in workflow
+    assert "one branch for one issue" in workflow
+    assert "Closes #<issue-number>" in workflow
+    assert "Linked Issue" in template
+    assert "Validation" in template
+    assert "Screenshots Or Logs" in template
+    assert "[Pull Request Workflow](docs/PR_WORKFLOW.md)" in readme
