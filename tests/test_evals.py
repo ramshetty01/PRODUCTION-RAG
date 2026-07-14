@@ -24,6 +24,9 @@ REQUIRED_FIELDS = {
     "source",
     "page",
     "verified",
+    "category",
+    "permission_level",
+    "retrieval_mode",
 }
 
 
@@ -38,11 +41,14 @@ def load_cases():
 def test_golden_dataset_has_initial_verified_examples():
     cases = load_cases()
 
-    assert len(cases) >= 50
+    assert len(cases) >= 60
     assert all(case["verified"] is True for case in cases)
-    assert {"factual", "lexical", "citation-heavy", "refusal", "multi-hop"} <= {
+    assert {"factual", "lexical", "citation-heavy", "refusal", "multi-hop", "permission-sensitive", "adversarial"} <= {
         case["category"] for case in cases
     }
+    assert {"public", "restricted"} <= {case["permission_level"] for case in cases}
+    assert {"semantic", "exact", "hybrid", "sparse", "reranked"} <= {case["retrieval_mode"] for case in cases}
+    assert len({case["source"] for case in cases}) >= 2
 
 
 def test_golden_dataset_rows_have_required_schema():
@@ -52,10 +58,12 @@ def test_golden_dataset_rows_have_required_schema():
         assert case["question"].endswith("?")
         assert case["expected_answer"]
         assert case["expected_evidence"]
-        assert case["source"] == "docs.pdf"
+        assert case["source"]
         assert isinstance(case["page"], int)
         assert isinstance(case["expected_citations"], list)
         assert case["expected_citations"]
+        assert case["permission_level"] in {"public", "restricted"}
+        assert case["retrieval_mode"] in {"semantic", "exact", "hybrid", "sparse", "reranked"}
 
 
 def test_offline_eval_reports_quality_metrics():
