@@ -69,3 +69,15 @@ def test_pr_workflow_and_template_document_issue_tracking():
     assert "Validation" in template
     assert "Screenshots Or Logs" in template
     assert "[Pull Request Workflow](docs/PR_WORKFLOW.md)" in readme
+
+
+def test_backup_recovery_documents_generated_state_and_rebuild():
+    recovery = (ROOT / "docs" / "BACKUP_RECOVERY.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "chroma_db/" in recovery
+    assert "data/processed/ingestion_manifest.json" in recovery
+    assert "python scripts/ingest.py --pdf docs.pdf --build-vector-db" in recovery
+    assert "evals/golden.jsonl" in recovery
+    assert ".env" in recovery
+    assert "[Backup And Recovery](docs/BACKUP_RECOVERY.md)" in readme

@@ -101,4 +101,5 @@ Next setup issue: #22, testing strategy and baseline test documentation.
 - [Testing Strategy](docs/TESTING.md)
 - [Pull Request Workflow](docs/PR_WORKFLOW.md)
 - [Deployment](docs/DEPLOYMENT.md)
+- [Backup And Recovery](docs/BACKUP_RECOVERY.md)
 - [Golden Evaluation Dataset](evals/README.md)
