@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from src.rag.auth import AuthContext, authenticate_api_key, parse_api_keys
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_token_summary, count_tokens
 from src.rag.config import load_settings
 from src.rag.generation import generate_answer
@@ -20,6 +21,7 @@ from src.rag.vector_store import build_chroma_db, count_records
 
 SETTINGS = load_settings()
 SUPPORTED_RETRIEVAL_MODES = {"semantic", "exact", "hybrid", "sparse", "reranked"}
+AUTH_CONTEXTS = parse_api_keys(SETTINGS.api_keys)
 
 
 class HealthResponse(BaseModel):
@@ -51,7 +53,7 @@ class QueryRequest(BaseModel):
     retrieval_mode: str = Field(default=SETTINGS.retrieval_mode)
     persist_dir: str = Field(default=SETTINGS.vector_db_path)
     metadata_filters: dict | None = None
-    user_roles: list[str] = Field(default_factory=lambda: ["public"])
+    user_roles: list[str] = Field(default_factory=lambda: ["public"], deprecated=True)
 
 
 class CitationResponse(BaseModel):
@@ -97,11 +99,18 @@ QUERY_CACHE = QueryCache()
 RATE_LIMITER = RateLimiter(max_requests=120, window_seconds=60)
 
 
+def _auth_context(x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> AuthContext:
+    try:
+        return authenticate_api_key(x_api_key, AUTH_CONTEXTS)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
 def _candidate_documents(vectorstore, query: str, top_k: int):
     return vectorstore.similarity_search(query, k=max(top_k * 4, top_k))
 
 
-def _retrieve_for_request(query: str, request: QueryRequest, vectorstore):
+def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_context: AuthContext):
     mode = request.retrieval_mode.lower()
     if mode not in SUPPORTED_RETRIEVAL_MODES:
         raise ValueError(f"Unsupported retrieval mode: {request.retrieval_mode}")
@@ -123,7 +132,7 @@ def _retrieve_for_request(query: str, request: QueryRequest, vectorstore):
         top_k=request.top_k,
         reranker=reranker,
         metadata_filters=request.metadata_filters,
-        user_roles=set(request.user_roles),
+        user_roles=auth_context.roles,
     )
 
 
@@ -179,7 +188,7 @@ def ingest(request: IngestRequest):
 
 
 @router.post("/query", response_model=QueryResponse)
-def query(request: QueryRequest):
+def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_context)):
     request_id = new_request_id()
     try:
         safe_query = validate_query(request.query)
@@ -206,6 +215,7 @@ def query(request: QueryRequest):
                 safe_query,
                 request,
                 vectorstore,
+                auth_context,
             )
             response = generate_answer(safe_query, chunks)
             event.retrieved_chunk_ids = chunk_ids(chunks)
@@ -222,6 +232,7 @@ def query(request: QueryRequest):
                 "top_k": request.top_k,
                 "returned_chunks": len(chunks),
                 "chunk_ids": [chunk.metadata.get("chunk_id") for chunk in chunks],
+                "auth_subject": auth_context.subject,
             },
             "trace": event.to_log_dict(),
             "cached": False,

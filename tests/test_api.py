@@ -60,6 +60,7 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
         "top_k": 2,
         "returned_chunks": 1,
         "chunk_ids": ["docs:p2:c3"],
+        "auth_subject": "dev-public",
     }
     assert body["trace"]["request_id"] == body["request_id"]
     assert body["trace"]["retrieved_chunk_ids"] == ["docs:p2:c3"]
@@ -122,7 +123,43 @@ def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
 
     assert response.status_code == 200
     body = response.json()
+    assert body["retrieval"]["chunk_ids"] == []
+
+
+def test_query_endpoint_derives_admin_role_from_api_key(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/query",
+        headers={"X-API-Key": "admin-key"},
+        json={
+            "query": "payroll",
+            "top_k": 2,
+            "metadata_filters": {"document_id": "secret"},
+            "user_roles": ["public"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
     assert body["retrieval"]["chunk_ids"] == ["secret:p0:c0"]
+
+
+def test_query_endpoint_rejects_missing_and_invalid_api_key_when_configured(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("public-key:public"))
+    client = TestClient(routes.create_app())
+
+    missing = client.post("/query", json={"query": "runner"})
+    invalid = client.post("/query", headers={"X-API-Key": "bad-key"}, json={"query": "runner"})
+
+    assert missing.status_code == 401
+    assert missing.json() == {"detail": "missing API key"}
+    assert invalid.status_code == 401
+    assert invalid.json() == {"detail": "invalid API key"}
 
 
 def test_query_endpoint_supports_exact_retrieval_mode(monkeypatch):

@@ -30,6 +30,7 @@ class RuntimeSettings:
     reranker_provider: str = "lexical"
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_allow_fallback: bool = True
+    api_keys: str = ""
 
 
 def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
@@ -85,4 +86,5 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
             "cross-encoder/ms-marco-MiniLM-L-6-v2",
         ),
         reranker_allow_fallback=_setting_bool(dotenv_values, "RAG_RERANKER_ALLOW_FALLBACK", True),
+        api_keys=_setting_value(dotenv_values, "RAG_API_KEYS", ""),
     )

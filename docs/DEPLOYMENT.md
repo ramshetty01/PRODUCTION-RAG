@@ -40,6 +40,9 @@ Environment variables are documented in `.env.example`:
 - `RAG_EMBEDDING_MODEL`: default embedding model name.
 - `RAG_TOP_K`: default retrieval size.
 - `RAG_LOG_LEVEL`: application log level.
+- `RAG_API_KEYS`: optional comma-separated API key map in
+  `key:role1|role2[:tenant]` format. If unset, local development requests run
+  as `public`.
 
 Local development can still use the virtual environment:
 
