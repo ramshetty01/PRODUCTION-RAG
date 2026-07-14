@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import tomllib
 from pathlib import Path
 
 
 DEFAULT_DATASET = Path(__file__).resolve().parent / "golden.jsonl"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "settings.toml"
 
 
 def load_dataset(path: str | Path = DEFAULT_DATASET) -> list[dict]:
@@ -39,11 +41,26 @@ def evaluate_dataset(cases: list[dict]) -> dict:
     }
 
 
-def print_report(metrics: dict) -> None:
+def load_quality_threshold(config_path: str | Path = DEFAULT_CONFIG) -> float:
+    config_path = Path(config_path)
+    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    return float(config["evaluation"]["min_faithfulness"])
+
+
+def quality_gate(metrics: dict, min_faithfulness: float) -> tuple[bool, str]:
+    faithfulness = metrics["faithfulness"]
+    if faithfulness >= min_faithfulness:
+        return True, f"faithfulness passed: {faithfulness:.2f} >= {min_faithfulness:.2f}"
+    return False, f"faithfulness failed: {faithfulness:.2f} < {min_faithfulness:.2f}"
+
+
+def print_report(metrics: dict, min_faithfulness: float | None = None) -> None:
     print("RAG evaluation report")
     print(f"total_cases={metrics['total_cases']}")
     print(f"verified_cases={metrics['verified_cases']}")
     print(f"faithfulness={metrics['faithfulness']:.2f}")
+    if min_faithfulness is not None:
+        print(f"faithfulness_threshold={min_faithfulness:.2f}")
     print(f"context_precision={metrics['context_precision']:.2f}")
     print(f"answer_relevance={metrics['answer_relevance']:.2f}")
     print(f"citation_coverage={metrics['citation_coverage']:.2f}")
@@ -52,19 +69,23 @@ def print_report(metrics: dict) -> None:
 def parse_args():
     parser = argparse.ArgumentParser(description="Run offline RAG evaluation over golden examples.")
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET))
-    parser.add_argument("--min-faithfulness", type=float, default=0.0)
+    parser.add_argument("--config", default=str(DEFAULT_CONFIG))
+    parser.add_argument("--min-faithfulness", type=float, default=None)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    min_faithfulness = (
+        args.min_faithfulness
+        if args.min_faithfulness is not None
+        else load_quality_threshold(args.config)
+    )
     metrics = evaluate_dataset(load_dataset(args.dataset))
-    print_report(metrics)
-    if metrics["faithfulness"] < args.min_faithfulness:
-        print(
-            "faithfulness below threshold: "
-            f"{metrics['faithfulness']:.2f} < {args.min_faithfulness:.2f}"
-        )
+    print_report(metrics, min_faithfulness=min_faithfulness)
+    passed, message = quality_gate(metrics, min_faithfulness)
+    print(message)
+    if not passed:
         return 1
     return 0
 
