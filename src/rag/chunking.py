@@ -23,6 +23,17 @@ def count_tokens(text):
     return len(tokenize(text))
 
 
+def chunk_token_summary(chunks) -> dict:
+    token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
+    return {
+        "chunks": len(token_counts),
+        "min_tokens": min(token_counts) if token_counts else None,
+        "max_tokens": max(token_counts) if token_counts else None,
+        "target_tokens": DEFAULT_CHUNK_TOKENS,
+        "overlap_tokens": DEFAULT_CHUNK_OVERLAP_TOKENS,
+    }
+
+
 def load_pdf(file_path=DEFAULT_PDF_PATH):
     file_path = Path(file_path).expanduser().resolve()
     loader = PyPDFLoader(str(file_path))

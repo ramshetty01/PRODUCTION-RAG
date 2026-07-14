@@ -4,6 +4,7 @@ from src.rag.chunking import (
     DEFAULT_CHUNK_OVERLAP_TOKENS,
     DEFAULT_CHUNK_TOKENS,
     chunk_documents,
+    chunk_token_summary,
     count_tokens,
 )
 
@@ -23,6 +24,8 @@ def test_chunk_documents_uses_token_target_and_preserves_metadata():
     assert chunks[0].metadata["document_id"] == "docs"
     assert chunks[0].metadata["document_version"] == "v1"
     assert chunks[0].metadata["access_roles"] == ["public"]
+    assert 500 <= DEFAULT_CHUNK_TOKENS <= 800
+    assert DEFAULT_CHUNK_OVERLAP_TOKENS == 100
 
 
 def test_neighboring_chunks_keep_overlap():
@@ -37,3 +40,16 @@ def test_neighboring_chunks_keep_overlap():
     assert first_tokens[-DEFAULT_CHUNK_OVERLAP_TOKENS:] == second_tokens[
         :DEFAULT_CHUNK_OVERLAP_TOKENS
     ]
+
+
+def test_chunk_token_summary_reports_verification_counts():
+    text = " ".join(f"token{i}" for i in range(900))
+    docs = [Document(page_content=text, metadata={"source": "docs.pdf", "page": 0})]
+
+    chunks = chunk_documents(docs)
+    summary = chunk_token_summary(chunks)
+
+    assert summary["chunks"] == len(chunks)
+    assert summary["max_tokens"] <= DEFAULT_CHUNK_TOKENS
+    assert summary["target_tokens"] == DEFAULT_CHUNK_TOKENS
+    assert summary["overlap_tokens"] == DEFAULT_CHUNK_OVERLAP_TOKENS
