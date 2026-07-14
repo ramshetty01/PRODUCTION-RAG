@@ -11,9 +11,14 @@ Each line is one JSON object with these fields:
 - `source`: source document name.
 - `page`: zero-based PDF page number from the loader metadata.
 - `verified`: must be `true` for cases used in quality gates.
+- `category`: coverage bucket such as factual, lexical, citation-heavy,
+  refusal, or multi-hop.
 
-The initial dataset is intentionally small. Grow it toward 50-200 verified
-examples as more source documents and failure cases are added.
+The committed dataset contains 50 verified examples. It covers factual
+definition questions, exact lexical queries, citation-heavy checks, refusal
+boundaries, and multi-hop questions that combine workflow, event, job, and
+runner concepts. Grow it toward 100-200 verified examples as more source
+documents and production failure cases are added.
 
 ## Running Offline Evaluation
 
