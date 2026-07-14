@@ -41,6 +41,7 @@ def test_health_endpoint_returns_status():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert response.headers["X-Request-ID"]
 
 
 def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
@@ -234,6 +235,20 @@ def test_query_endpoint_returns_clean_json_errors(monkeypatch):
     body = response.json()
     assert body["detail"]["message"] == "vector store missing"
     assert body["detail"]["trace"]["error"] == "RuntimeError"
+
+
+def test_metrics_endpoint_exports_prometheus_text():
+    routes.METRICS = routes.MetricsRegistry()
+    client = TestClient(routes.create_app())
+
+    client.get("/health")
+    response = client.get("/metrics", headers={"X-Request-ID": "req-metrics"})
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == "req-metrics"
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "rag_api_requests_total" in response.text
+    assert 'rag_api_request_status_total{status_code="200"}' in response.text
 
 
 def test_query_endpoint_rejects_persist_dir_path_traversal():

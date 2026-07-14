@@ -29,6 +29,26 @@ Expected response:
 The Docker image includes a `HEALTHCHECK` that calls `/health` inside the
 container.
 
+## Metrics
+
+Prometheus-compatible request metrics are exposed at:
+
+```bash
+curl http://localhost:8000/metrics
+```
+
+The endpoint includes total requests, request counts by HTTP status code, and
+cumulative latency in milliseconds. Scrape this endpoint from your metrics
+collector and alert on elevated 4xx/5xx rates or rising latency.
+
+## Request Logs
+
+Every HTTP request emits one structured JSON log event through the `rag.api`
+logger. The payload includes the request ID, method, path, status code, and
+latency in milliseconds. Pass `X-Request-ID` from upstream gateways to preserve
+trace continuity; otherwise the API generates a new request ID and returns it in
+the response header.
+
 ## Runtime Configuration
 
 Environment variables are documented in `.env.example`:
