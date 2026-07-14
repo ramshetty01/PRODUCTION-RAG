@@ -32,7 +32,7 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest tests/test_chunking.py tests/test_citations.py tests/test_retrieval.py tests/test_ingestion.py tests/test_evals.py
+          python -m pytest
 
       - name: Run offline RAG evaluation
         run: |
