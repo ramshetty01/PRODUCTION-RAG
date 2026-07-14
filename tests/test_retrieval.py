@@ -1,7 +1,8 @@
 from langchain_core.documents import Document
 
 from src.rag.generation import generate_answer
-from src.rag.retrieval import retrieve_chunks
+from src.rag.hybrid_search import BM25Index, hybrid_search
+from src.rag.retrieval import retrieve_chunks, retrieve_hybrid_chunks
 
 
 class FakeVectorStore:
@@ -60,3 +61,52 @@ def test_generate_answer_sends_query_and_context_to_llm_with_citations():
     assert "A runner executes jobs." in llm.prompts[0]
     assert response["answer"] == "A job is a set of steps in a workflow. [docs:p1:c2]"
     assert [citation["id"] for citation in response["citations"]] == ["docs:p1:c2"]
+
+
+def test_bm25_keyword_search_finds_exact_terms():
+    docs = [
+        make_doc("A workflow is an automated process.", "docs:p0:c0"),
+        make_doc("Error code E123 appears in the deployment logs.", "docs:p0:c1"),
+    ]
+
+    results = BM25Index(docs).search("E123", top_k=1)
+
+    assert [result.document.metadata["chunk_id"] for result in results] == ["docs:p0:c1"]
+
+
+def test_hybrid_search_combines_vector_and_keyword_results_without_duplicates():
+    exact_doc = make_doc("Error code E123 appears in the deployment logs.", "docs:p0:c1")
+    semantic_doc = make_doc("A runner executes jobs on a machine.", "docs:p0:c2")
+    vectorstore = FakeVectorStore([semantic_doc, exact_doc])
+    keyword_documents = [exact_doc, semantic_doc]
+
+    results = hybrid_search(
+        "E123 runner",
+        vectorstore=vectorstore,
+        keyword_documents=keyword_documents,
+        top_k=2,
+        vector_weight=0.5,
+        keyword_weight=0.5,
+    )
+
+    result_ids = [result.metadata["chunk_id"] for result in results]
+    assert set(result_ids) == {"docs:p0:c1", "docs:p0:c2"}
+    assert len(result_ids) == len(set(result_ids))
+    assert vectorstore.calls == [{"query": "E123 runner", "k": 2}]
+
+
+def test_retrieve_hybrid_chunks_uses_configurable_weights():
+    exact_doc = make_doc("The phrase release-marker-77 is exact.", "docs:p0:c3")
+    semantic_doc = make_doc("Release automation runs in workflows.", "docs:p0:c4")
+    vectorstore = FakeVectorStore([semantic_doc])
+
+    results = retrieve_hybrid_chunks(
+        "release-marker-77",
+        vectorstore=vectorstore,
+        keyword_documents=[exact_doc, semantic_doc],
+        top_k=1,
+        vector_weight=0.1,
+        keyword_weight=0.9,
+    )
+
+    assert results[0].metadata["chunk_id"] == "docs:p0:c3"
