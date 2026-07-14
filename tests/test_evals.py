@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from evals.run_ragas import evaluate_dataset, load_dataset
+
 
 GOLDEN_DATASET = Path(__file__).resolve().parents[1] / "evals" / "golden.jsonl"
 
@@ -43,3 +45,13 @@ def test_golden_dataset_rows_have_required_schema():
         assert isinstance(case["page"], int)
         assert isinstance(case["expected_citations"], list)
         assert case["expected_citations"]
+
+
+def test_offline_eval_reports_quality_metrics():
+    metrics = evaluate_dataset(load_dataset(GOLDEN_DATASET))
+
+    assert metrics["total_cases"] >= 5
+    assert metrics["faithfulness"] == 1.0
+    assert metrics["context_precision"] == 1.0
+    assert metrics["answer_relevance"] == 1.0
+    assert metrics["citation_coverage"] == 1.0
