@@ -3,7 +3,8 @@ from langchain_core.documents import Document
 from src.rag.generation import REFUSAL_ANSWER, generate_answer
 from src.rag.hybrid_search import BM25Index, hybrid_search
 from src.rag.prompts import PromptBundle, load_prompt_bundle
-from src.rag.retrieval import retrieve_chunks, retrieve_hybrid_chunks
+from src.rag.reranking import LexicalReranker, rerank_chunks
+from src.rag.retrieval import retrieve_chunks, retrieve_hybrid_chunks, retrieve_reranked_chunks
 
 
 class FakeVectorStore:
@@ -161,3 +162,29 @@ def test_retrieve_hybrid_chunks_uses_configurable_weights():
     )
 
     assert results[0].metadata["chunk_id"] == "docs:p0:c3"
+
+
+def test_rerank_chunks_sorts_candidates_by_query_chunk_score():
+    weak = make_doc("Build automation uses workflows.", "docs:p0:c5")
+    strong = make_doc("A runner executes jobs on a machine.", "docs:p0:c6")
+
+    results = rerank_chunks("runner executes jobs", [weak, strong], top_k=1, reranker=LexicalReranker())
+
+    assert results == [strong]
+
+
+def test_retrieve_reranked_chunks_reranks_hybrid_candidates():
+    weak = make_doc("Build automation uses workflows.", "docs:p0:c5")
+    strong = make_doc("A runner executes jobs on a machine.", "docs:p0:c6")
+    vectorstore = FakeVectorStore([weak, strong])
+
+    results = retrieve_reranked_chunks(
+        "runner executes jobs",
+        vectorstore=vectorstore,
+        keyword_documents=[weak, strong],
+        top_k=1,
+        candidate_k=2,
+        reranker=LexicalReranker(),
+    )
+
+    assert results == [strong]
