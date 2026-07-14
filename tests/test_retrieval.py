@@ -1,10 +1,18 @@
 from langchain_core.documents import Document
 
 from src.rag.generation import REFUSAL_ANSWER, generate_answer
+from src.rag.advanced.exact_search import exact_search
 from src.rag.hybrid_search import BM25Index, hybrid_search
 from src.rag.prompts import PromptBundle, load_prompt_bundle
 from src.rag.reranking import LexicalReranker, rerank_chunks
-from src.rag.retrieval import filter_authorized_chunks, retrieve_chunks, retrieve_hybrid_chunks, retrieve_reranked_chunks
+from src.rag.retrieval import (
+    filter_authorized_chunks,
+    retrieve_by_mode,
+    retrieve_chunks,
+    retrieve_exact_chunks,
+    retrieve_hybrid_chunks,
+    retrieve_reranked_chunks,
+)
 
 
 class FakeVectorStore:
@@ -199,6 +207,39 @@ def test_retrieve_hybrid_chunks_uses_configurable_weights():
     )
 
     assert results[0].metadata["chunk_id"] == "docs:p0:c3"
+
+
+def test_exact_search_matches_phrase_text_and_metadata():
+    text_match = make_doc("The command release-marker-77 appears here.", "docs:p0:c3")
+    metadata_match = make_doc("No exact text here.", "docs:p0:c4", section="release-marker-77")
+
+    matches = exact_search("release-marker-77", [text_match, metadata_match], top_k=2)
+
+    assert [match.document.metadata["chunk_id"] for match in matches] == ["docs:p0:c3", "docs:p0:c4"]
+    assert "chunk text" in matches[0].explanation
+    assert "metadata" in matches[1].explanation
+
+
+def test_retrieve_by_mode_selects_exact_semantic_or_hybrid():
+    exact_doc = make_doc("The exact phrase deploy-code-42 exists.", "docs:p0:c3")
+    semantic_doc = make_doc("Deployment automation uses workflows.", "docs:p0:c4")
+    vectorstore = FakeVectorStore([semantic_doc])
+
+    exact_results = retrieve_by_mode("deploy-code-42", "exact", documents=[exact_doc, semantic_doc], top_k=1)
+    semantic_results = retrieve_by_mode("deployment", "semantic", vectorstore=vectorstore, top_k=1)
+
+    assert exact_results == [exact_doc]
+    assert semantic_results == [semantic_doc]
+
+
+def test_hybrid_retrieval_includes_exact_candidates():
+    exact_doc = make_doc("The exact phrase deploy-code-42 exists.", "docs:p0:c3")
+    semantic_doc = make_doc("Deployment automation uses workflows.", "docs:p0:c4")
+    vectorstore = FakeVectorStore([semantic_doc])
+
+    results = retrieve_hybrid_chunks("deploy-code-42", vectorstore, [exact_doc, semantic_doc], top_k=2)
+
+    assert results[0] == exact_doc
 
 
 def test_rerank_chunks_sorts_candidates_by_query_chunk_score():
