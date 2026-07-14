@@ -4,6 +4,7 @@ from pathlib import Path
 
 from src.rag.chunking import DEFAULT_DB_PATH
 from src.rag.hybrid_search import hybrid_search
+from src.rag.reranking import rerank_chunks
 from src.rag.vector_store import load_chroma_db
 
 
@@ -42,3 +43,21 @@ def retrieve_hybrid_chunks(
         vector_weight=vector_weight,
         keyword_weight=keyword_weight,
     )
+
+
+def retrieve_reranked_chunks(
+    query: str,
+    vectorstore,
+    keyword_documents,
+    top_k: int = DEFAULT_TOP_K,
+    candidate_k: int | None = None,
+    reranker=None,
+):
+    candidate_k = candidate_k or max(top_k * 3, top_k)
+    candidates = retrieve_hybrid_chunks(
+        query=query,
+        vectorstore=vectorstore,
+        keyword_documents=keyword_documents,
+        top_k=candidate_k,
+    )
+    return rerank_chunks(query=query, chunks=candidates, top_k=top_k, reranker=reranker)
