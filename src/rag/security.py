@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import time
 from collections import defaultdict, deque
+from pathlib import Path
 
 
 PROMPT_INJECTION_PATTERNS = [
@@ -32,6 +33,19 @@ def validate_query(query: str, max_length: int = 2000) -> str:
     if contains_prompt_injection(query):
         raise ValueError("query contains unsafe instructions")
     return redact_pii(query)
+
+
+def validate_path(path: str | Path, allowed_root: str | Path = ".") -> Path:
+    allowed_root = Path(allowed_root).resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = allowed_root / candidate
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(allowed_root)
+    except ValueError as exc:
+        raise ValueError(f"path is outside allowed root: {path}") from exc
+    return resolved
 
 
 class RateLimiter:

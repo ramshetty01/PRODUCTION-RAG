@@ -236,7 +236,36 @@ def test_query_endpoint_returns_clean_json_errors(monkeypatch):
     assert body["detail"]["trace"]["error"] == "RuntimeError"
 
 
-def test_feedback_and_monitoring_endpoints(tmp_path):
+def test_query_endpoint_rejects_persist_dir_path_traversal():
+    routes.QUERY_CACHE.values.clear()
+    client = TestClient(routes.create_app())
+
+    response = client.post("/query", json={"query": "runner", "persist_dir": "../outside-chroma"})
+
+    assert response.status_code == 400
+    assert "outside allowed root" in response.json()["detail"]
+
+
+def test_feedback_endpoint_rejects_path_traversal():
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/feedback",
+        json={
+            "request_id": "req-1",
+            "query": "q",
+            "answer": "a",
+            "helpful": True,
+            "feedback_path": "../feedback.jsonl",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "outside allowed root" in response.json()["detail"]
+
+
+def test_feedback_and_monitoring_endpoints(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
     client = TestClient(routes.create_app())
     feedback_path = tmp_path / "feedback.jsonl"
 

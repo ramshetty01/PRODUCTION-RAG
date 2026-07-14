@@ -15,13 +15,14 @@ from src.rag.observability import TraceEvent, chunk_ids, citation_ids, new_reque
 from src.rag.performance import QueryCache, estimate_llm_cost
 from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode
-from src.rag.security import RateLimiter, validate_query
+from src.rag.security import RateLimiter, validate_path, validate_query
 from src.rag.vector_store import build_chroma_db, count_records
 
 
 SETTINGS = load_settings()
 SUPPORTED_RETRIEVAL_MODES = {"semantic", "exact", "hybrid", "sparse", "reranked"}
 AUTH_CONTEXTS = parse_api_keys(SETTINGS.api_keys)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 
 class HealthResponse(BaseModel):
@@ -106,6 +107,13 @@ def _auth_context(x_api_key: str | None = Header(default=None, alias="X-API-Key"
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
+def _safe_api_path(path: str | Path) -> Path:
+    try:
+        return validate_path(path, PROJECT_ROOT)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 def _candidate_documents(vectorstore, query: str, top_k: int):
     return vectorstore.similarity_search(query, k=max(top_k * 4, top_k))
 
@@ -144,8 +152,11 @@ def health():
 @router.post("/ingest", response_model=IngestResponse)
 def ingest(request: IngestRequest):
     try:
-        manifest = load_manifest(request.manifest_path)
-        decision = plan_document_ingestion(request.pdf_path, manifest)
+        pdf_path = _safe_api_path(request.pdf_path)
+        persist_dir = _safe_api_path(request.persist_dir)
+        manifest_path = _safe_api_path(request.manifest_path)
+        manifest = load_manifest(manifest_path)
+        decision = plan_document_ingestion(pdf_path, manifest)
         if not decision.should_reindex:
             return IngestResponse(
                 document_id=decision.document_id,
@@ -160,7 +171,7 @@ def ingest(request: IngestRequest):
             )
 
         chunks = chunk_pdf(
-            request.pdf_path,
+            pdf_path,
             chunk_size=SETTINGS.chunk_size,
             chunk_overlap=SETTINGS.chunk_overlap,
             document_version=decision.document_version,
@@ -168,10 +179,10 @@ def ingest(request: IngestRequest):
         token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
         vector_records = None
         if request.build_vector_db:
-            vectorstore = build_chroma_db(chunks, persist_directory=Path(request.persist_dir))
+            vectorstore = build_chroma_db(chunks, persist_directory=persist_dir)
             vector_records = count_records(vectorstore)
-        record_document_ingestion(manifest, decision, request.pdf_path, chunk_count=len(chunks))
-        save_manifest(manifest, request.manifest_path)
+        record_document_ingestion(manifest, decision, pdf_path, chunk_count=len(chunks))
+        save_manifest(manifest, manifest_path)
         return IngestResponse(
             document_id=decision.document_id,
             document_version=decision.document_version,
@@ -183,6 +194,8 @@ def ingest(request: IngestRequest):
             vector_records=vector_records,
             chunk_summary=chunk_token_summary(chunks),
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -214,7 +227,7 @@ def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_conte
 
     try:
         with trace_latency(event):
-            vectorstore = load_vectorstore(request.persist_dir)
+            vectorstore = load_vectorstore(_safe_api_path(request.persist_dir))
             retrieval_mode, chunks = _retrieve_for_request(
                 safe_query,
                 request,
@@ -243,6 +256,8 @@ def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_conte
         }
         QUERY_CACHE.set(safe_query, request.top_k, payload, cache_filters)
         return QueryResponse(**payload)
+    except HTTPException:
+        raise
     except Exception as exc:
         event.error = type(exc).__name__
         raise HTTPException(status_code=400, detail={"message": str(exc), "trace": event.to_log_dict()}) from exc
@@ -259,13 +274,13 @@ def feedback(request: FeedbackRequest):
         latency_ms=request.latency_ms,
         note=request.note,
     )
-    append_feedback(event, request.feedback_path)
+    append_feedback(event, _safe_api_path(request.feedback_path))
     return FeedbackResponse(status="recorded", request_id=request.request_id)
 
 
 @router.get("/monitoring", response_model=MonitoringResponse)
 def monitoring(feedback_path: str = str(DEFAULT_FEEDBACK_LOG)):
-    return MonitoringResponse(metrics=monitoring_metrics(load_feedback(feedback_path)))
+    return MonitoringResponse(metrics=monitoring_metrics(load_feedback(_safe_api_path(feedback_path))))
 
 
 def create_app() -> FastAPI:

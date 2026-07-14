@@ -45,6 +45,8 @@ Environment variables are documented in `.env.example`:
   as `public`.
 - Query cache entries are scoped by authenticated subject, tenant, and derived
   roles so restricted answers are not shared across authorization contexts.
+- API request paths are resolved under the project root and traversal outside
+  that root is rejected. Prefer server-side configured paths in production.
 
 Local development can still use the virtual environment:
 
