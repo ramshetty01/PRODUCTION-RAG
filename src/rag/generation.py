@@ -31,10 +31,11 @@ def enforce_grounded_answer(answer: str, chunks, refusal_answer: str = REFUSAL_A
     retrieved_ids = {citation_id_for_chunk(chunk) for chunk in chunks}
     cited_ids = extract_cited_ids(answer)
     valid_cited_ids = [citation_id for citation_id in cited_ids if citation_id in retrieved_ids]
+    invalid_cited_ids = [citation_id for citation_id in cited_ids if citation_id not in retrieved_ids]
 
     if not chunks or answer.strip() == refusal_answer:
         return _refusal_response(refusal_answer)
-    if not valid_cited_ids:
+    if not valid_cited_ids or invalid_cited_ids:
         return _refusal_response(refusal_answer)
 
     return attach_citations(answer, chunks, cited_ids=valid_cited_ids)

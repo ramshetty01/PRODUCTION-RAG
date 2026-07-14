@@ -38,8 +38,12 @@ def build_prompt_from_bundle(query: str, context: str, prompts: PromptBundle) ->
             prompts.system,
             prompts.citation,
             f"Refusal response: {prompts.refusal}",
+            "<user_question>",
             f"Question: {query}",
+            "</user_question>",
             "Retrieved context:",
+            "<retrieved_context>",
             context,
+            "</retrieved_context>",
         ]
     )
