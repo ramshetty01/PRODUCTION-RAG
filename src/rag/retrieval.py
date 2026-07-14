@@ -2,10 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-
-from src.rag.chunking import DEFAULT_DB_PATH, EMBEDDING_MODEL
+from src.rag.chunking import DEFAULT_DB_PATH
+from src.rag.vector_store import load_chroma_db
 
 
 DEFAULT_TOP_K = 4
@@ -13,12 +11,11 @@ DEFAULT_TOP_K = 4
 
 def load_vectorstore(
     persist_directory: str | Path = DEFAULT_DB_PATH,
-    embedding_model: str = EMBEDDING_MODEL,
+    embedding_function=None,
 ):
-    embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
-    return Chroma(
+    return load_chroma_db(
         persist_directory=str(persist_directory),
-        embedding_function=embeddings,
+        embedding_function=embedding_function,
     )
 
 
