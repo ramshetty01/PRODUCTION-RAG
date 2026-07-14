@@ -13,6 +13,7 @@ def test_readme_quickstart_documents_fresh_clone_flow():
     assert "python -m uvicorn main:app --reload" in readme
     assert "chroma_db/" in readme
     assert "[PRD](docs/PRD.md)" in readme
+    assert "[Architecture](docs/ARCHITECTURE.md)" in readme
     assert "[Testing Strategy](docs/TESTING.md)" in readme
 
 
@@ -32,3 +33,25 @@ def test_readme_documents_runtime_configuration():
     assert "src.rag.config.load_settings" in readme
     assert "chunk size" in readme
     assert "optional LLM provider" in readme
+
+
+def test_prd_documents_product_phases_and_metrics():
+    prd = (ROOT / "docs" / "PRD.md").read_text(encoding="utf-8")
+
+    assert "Product Goal" in prd
+    assert "Non-Goals" in prd
+    assert "Phase 1" in prd
+    assert "Phase 4" in prd
+    assert "Success Metrics" in prd
+    assert "issues/1" in prd
+    assert "issues/20" in prd
+
+
+def test_architecture_documents_data_flow_and_interfaces():
+    architecture = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+
+    assert "Data Flow" in architecture
+    assert "src/rag/chunking.py" in architecture
+    assert "POST /query" in architecture
+    assert "chroma_db/" in architecture
+    assert "python evals/run_ragas.py --config configs/settings.toml" in architecture

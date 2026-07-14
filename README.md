@@ -97,6 +97,7 @@ Next setup issue: #22, testing strategy and baseline test documentation.
 ## Documents
 
 - [PRD](docs/PRD.md)
+- [Architecture](docs/ARCHITECTURE.md)
 - [Testing Strategy](docs/TESTING.md)
 - [Deployment](docs/DEPLOYMENT.md)
 - [Golden Evaluation Dataset](evals/README.md)
