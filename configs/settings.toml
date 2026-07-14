@@ -9,3 +9,9 @@ generation = 10000
 
 [cost]
 llm_cost_per_1k_tokens = 0.0
+
+[drift_thresholds]
+no_answer_rate = 0.25
+citation_coverage_min = 0.80
+helpful_rate_min = 0.70
+retrieval_score_drop = 0.20
