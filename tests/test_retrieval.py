@@ -2,6 +2,7 @@ from langchain_core.documents import Document
 
 from src.rag.generation import REFUSAL_ANSWER, generate_answer
 from src.rag.hybrid_search import BM25Index, hybrid_search
+from src.rag.prompts import PromptBundle, load_prompt_bundle
 from src.rag.retrieval import retrieve_chunks, retrieve_hybrid_chunks
 
 
@@ -61,6 +62,36 @@ def test_generate_answer_sends_query_and_context_to_llm_with_citations():
     assert "A runner executes jobs." in llm.prompts[0]
     assert response["answer"] == "A job is a set of steps in a workflow. [docs:p1:c2]"
     assert [citation["id"] for citation in response["citations"]] == ["docs:p1:c2"]
+
+
+def test_generation_loads_prompt_bundle_at_runtime():
+    chunks = [make_doc("A job is a set of steps in a workflow.", "docs:p1:c2")]
+    llm = RecordingLLM("A job is a set of steps in a workflow. [docs:p1:c2]")
+    prompts = PromptBundle(
+        system="SYSTEM FROM TEST FILE",
+        citation="CITATION RULE FROM TEST FILE",
+        refusal=REFUSAL_ANSWER,
+        version="test-v1",
+    )
+
+    response = generate_answer("What is a job?", chunks, llm=llm, prompts=prompts)
+
+    assert "Prompt-Version: test-v1" in llm.prompts[0]
+    assert "SYSTEM FROM TEST FILE" in llm.prompts[0]
+    assert "CITATION RULE FROM TEST FILE" in llm.prompts[0]
+    assert response["citations"][0]["id"] == "docs:p1:c2"
+
+
+def test_prompt_bundle_loads_markdown_prompt_files(tmp_path):
+    (tmp_path / "system.md").write_text("system prompt", encoding="utf-8")
+    (tmp_path / "citation.md").write_text("citation prompt", encoding="utf-8")
+    (tmp_path / "refusal.md").write_text("refusal prompt", encoding="utf-8")
+
+    prompts = load_prompt_bundle(tmp_path)
+
+    assert prompts.system == "system prompt"
+    assert prompts.citation == "citation prompt"
+    assert prompts.refusal == "refusal prompt"
 
 
 def test_generate_answer_refuses_when_no_chunks_are_available():
