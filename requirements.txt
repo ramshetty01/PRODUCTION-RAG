@@ -1,4 +1,5 @@
 chromadb
+fastapi
 langchain-chroma
 langchain-community
 langchain-huggingface
@@ -6,3 +7,4 @@ langchain-text-splitters
 pypdf
 pytest
 sentence-transformers
+uvicorn
