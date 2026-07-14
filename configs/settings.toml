@@ -1,2 +1,11 @@
 [evaluation]
 min_faithfulness = 0.90
+
+[latency_budgets_ms]
+ingestion = 30000
+retrieval = 2000
+reranking = 2000
+generation = 10000
+
+[cost]
+llm_cost_per_1k_tokens = 0.0

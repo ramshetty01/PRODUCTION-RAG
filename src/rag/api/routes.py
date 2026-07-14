@@ -9,6 +9,7 @@ from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, count
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
 from src.rag.observability import TraceEvent, chunk_ids, citation_ids, new_request_id, trace_latency
+from src.rag.performance import QueryCache, estimate_llm_cost
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_chunks
 from src.rag.vector_store import build_chroma_db, count_records
 
@@ -58,9 +59,11 @@ class QueryResponse(BaseModel):
     citations: list[CitationResponse]
     retrieval: dict
     trace: dict
+    cached: bool = False
 
 
 router = APIRouter()
+QUERY_CACHE = QueryCache()
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -111,6 +114,12 @@ def ingest(request: IngestRequest):
 def query(request: QueryRequest):
     request_id = new_request_id()
     event = TraceEvent(request_id=request_id, query=request.query)
+    cached_payload = QUERY_CACHE.get(request.query, request.top_k, request.metadata_filters)
+    if cached_payload:
+        cached_payload = {**cached_payload, "request_id": request_id, "cached": True}
+        cached_payload["trace"] = {**cached_payload["trace"], "request_id": request_id}
+        return QueryResponse(**cached_payload)
+
     try:
         with trace_latency(event):
             vectorstore = load_vectorstore(request.persist_dir)
@@ -126,17 +135,21 @@ def query(request: QueryRequest):
             event.answer = response["answer"]
             event.citations = citation_ids(response["citations"])
             event.token_usage = response.get("token_usage", {})
-        return QueryResponse(
-            request_id=request_id,
-            answer=response["answer"],
-            citations=response["citations"],
-            retrieval={
+            event.token_usage["estimated_cost"] = estimate_llm_cost(event.token_usage)
+        payload = {
+            "request_id": request_id,
+            "answer": response["answer"],
+            "citations": response["citations"],
+            "retrieval": {
                 "top_k": request.top_k,
                 "returned_chunks": len(chunks),
                 "chunk_ids": [chunk.metadata.get("chunk_id") for chunk in chunks],
             },
-            trace=event.to_log_dict(),
-        )
+            "trace": event.to_log_dict(),
+            "cached": False,
+        }
+        QUERY_CACHE.set(request.query, request.top_k, payload, request.metadata_filters)
+        return QueryResponse(**payload)
     except Exception as exc:
         event.error = type(exc).__name__
         raise HTTPException(status_code=400, detail={"message": str(exc), "trace": event.to_log_dict()}) from exc
