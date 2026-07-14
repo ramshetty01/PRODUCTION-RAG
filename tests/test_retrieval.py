@@ -4,7 +4,7 @@ from src.rag.generation import REFUSAL_ANSWER, generate_answer
 from src.rag.hybrid_search import BM25Index, hybrid_search
 from src.rag.prompts import PromptBundle, load_prompt_bundle
 from src.rag.reranking import LexicalReranker, rerank_chunks
-from src.rag.retrieval import retrieve_chunks, retrieve_hybrid_chunks, retrieve_reranked_chunks
+from src.rag.retrieval import filter_authorized_chunks, retrieve_chunks, retrieve_hybrid_chunks, retrieve_reranked_chunks
 
 
 class FakeVectorStore:
@@ -27,15 +27,20 @@ class RecordingLLM:
         return self.answer
 
 
-def make_doc(text, chunk_id):
+def make_doc(text, chunk_id, **metadata):
+    base_metadata = {
+        "source": "/tmp/docs.pdf",
+        "page": 1,
+        "chunk_index": 2,
+        "chunk_id": chunk_id,
+        "document_id": "docs",
+        "document_version": "v1",
+        "access_roles": ["public"],
+    }
+    base_metadata.update(metadata)
     return Document(
         page_content=text,
-        metadata={
-            "source": "/tmp/docs.pdf",
-            "page": 1,
-            "chunk_index": 2,
-            "chunk_id": chunk_id,
-        },
+        metadata=base_metadata,
     )
 
 
@@ -47,6 +52,36 @@ def test_retrieve_chunks_uses_vector_similarity_and_top_k():
 
     assert results == [docs[0]]
     assert vectorstore.calls == [{"query": "What is a job?", "k": 1}]
+
+
+def test_retrieval_filters_metadata_and_permissions():
+    public = make_doc("public workflow", "docs:p0:c0", document_id="public-doc")
+    private = make_doc(
+        "private payroll workflow",
+        "secret:p0:c0",
+        document_id="secret-doc",
+        access_roles=["admin"],
+    )
+    vectorstore = FakeVectorStore([private, public])
+
+    public_results = retrieve_chunks("workflow", vectorstore, top_k=2, user_roles={"public"})
+    admin_results = retrieve_chunks(
+        "workflow",
+        vectorstore,
+        top_k=2,
+        metadata_filters={"document_id": "secret-doc"},
+        user_roles={"admin"},
+    )
+
+    assert public_results == [public]
+    assert admin_results == [private]
+
+
+def test_filter_authorized_chunks_excludes_restricted_documents():
+    public = make_doc("public", "docs:p0:c0", access_roles=["public"])
+    restricted = make_doc("restricted", "secret:p0:c0", access_roles=["admin"])
+
+    assert filter_authorized_chunks([public, restricted], user_roles={"public"}) == [public]
 
 
 def test_generate_answer_sends_query_and_context_to_llm_with_citations():

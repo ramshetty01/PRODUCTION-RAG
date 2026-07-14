@@ -20,6 +20,9 @@ def test_chunk_documents_uses_token_target_and_preserves_metadata():
     assert chunks[0].metadata["page"] == 0
     assert chunks[0].metadata["chunk_index"] == 0
     assert chunks[0].metadata["chunk_id"].startswith("docs:p0:c0")
+    assert chunks[0].metadata["document_id"] == "docs"
+    assert chunks[0].metadata["document_version"] == "v1"
+    assert chunks[0].metadata["access_roles"] == ["public"]
 
 
 def test_neighboring_chunks_keep_overlap():
