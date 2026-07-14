@@ -12,6 +12,31 @@ docker build -t production-rag .
 docker run --rm -p 8000:8000 --env-file .env.example production-rag
 ```
 
+## Docker Compose
+
+Use the production compose manifest when you want local persistence for ChromaDB
+and processed ingestion state:
+
+```bash
+docker compose -f deploy/docker-compose.yml up --build
+```
+
+## Kubernetes
+
+Kubernetes manifests live in `deploy/kubernetes`. They include a ConfigMap,
+Secret example, PersistentVolumeClaim, Deployment with `/health` readiness and
+liveness probes, and a ClusterIP Service.
+
+```bash
+kubectl apply -f deploy/kubernetes/configmap.yaml
+kubectl apply -f deploy/kubernetes/pvc.yaml
+kubectl apply -f deploy/kubernetes/deployment.yaml
+kubectl apply -f deploy/kubernetes/service.yaml
+```
+
+Create a production secret from `deploy/kubernetes/secret.example.yaml` before
+starting the Deployment.
+
 ## Health Check
 
 The API exposes:
