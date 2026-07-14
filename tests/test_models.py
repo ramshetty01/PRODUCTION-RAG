@@ -1,0 +1,34 @@
+import pytest
+
+from src.rag.config import RuntimeSettings
+from src.rag.llm.client import ExtractiveLLMClient
+from src.rag.models import get_model_provider
+
+
+class FakeEmbeddings:
+    def __init__(self, model_name):
+        self.model_name = model_name
+
+
+def test_model_provider_returns_configured_extractive_llm():
+    settings = RuntimeSettings(llm_provider="extractive")
+    provider = get_model_provider(settings)
+
+    assert provider.name == "extractive"
+    assert isinstance(provider.llm(), ExtractiveLLMClient)
+
+
+def test_model_provider_uses_configured_embedding_model(monkeypatch):
+    import src.rag.models as models
+
+    monkeypatch.setattr(models, "HuggingFaceEmbeddings", FakeEmbeddings)
+    settings = RuntimeSettings(llm_provider="local", embedding_model="custom-embedding-model")
+
+    embeddings = get_model_provider(settings).embeddings()
+
+    assert embeddings.model_name == "custom-embedding-model"
+
+
+def test_model_provider_rejects_unknown_provider():
+    with pytest.raises(ValueError, match="Unsupported model provider"):
+        get_model_provider(RuntimeSettings(llm_provider="unknown"))

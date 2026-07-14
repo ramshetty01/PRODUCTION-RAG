@@ -30,6 +30,7 @@
 - `src/rag/hybrid_search.py`: BM25 keyword scoring plus vector result merging.
 - `src/rag/reranking.py`: candidate reranking interface.
 - `src/rag/prompts.py`: versioned prompt loading from `prompts/`.
+- `src/rag/models.py`: model provider abstraction for embeddings and LLMs.
 - `src/rag/generation.py`: answer generation, refusal, token usage.
 - `src/rag/security.py`: query validation, injection detection, PII redaction.
 - `src/rag/api/routes.py`: FastAPI service.
