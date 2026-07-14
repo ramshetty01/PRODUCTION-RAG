@@ -32,7 +32,18 @@ def test_readme_documents_runtime_configuration():
     assert ".env.example" in readme
     assert "src.rag.config.load_settings" in readme
     assert "chunk size" in readme
-    assert "optional LLM provider" in readme
+    assert "optional LLM/reranker provider" in readme
+
+
+def test_readme_contains_portfolio_demo_walkthrough():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "Portfolio Demo" in readme
+    assert "python scripts/query.py \"What is a GitHub Actions runner?\"" in readme
+    assert '"retrieval_mode":"hybrid"' in readme
+    assert "The answer is not available in the retrieved context." in readme
+    assert "faithfulness passed: 1.00 >= 0.90" in readme
+    assert "[Reranking](docs/RERANKING.md)" in readme
 
 
 def test_prd_documents_product_phases_and_metrics():

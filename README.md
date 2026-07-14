@@ -91,6 +91,83 @@ curl -X POST http://localhost:8000/query \
   -d '{"query":"What does a runner do?","retrieval_mode":"hybrid","top_k":4}'
 ```
 
+## Portfolio Demo
+
+This repo demonstrates a production-style RAG lifecycle: ingestion, chunking,
+vector persistence, hybrid retrieval, reranking, grounded generation,
+monitoring, and evaluation gates.
+
+Run the demo from a fresh checkout:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python scripts/ingest.py --pdf docs.pdf --build-vector-db
+```
+
+Ask a cited question:
+
+```bash
+python scripts/query.py "What is a GitHub Actions runner?"
+```
+
+Expected shape:
+
+```text
+A runner is a server that runs workflows when they are triggered. [docs:p2:c2]
+
+Citations:
+- docs:p2:c2 docs.pdf page 2
+```
+
+Try a lexical or hybrid-style question through the API:
+
+```bash
+python -m uvicorn main:app --reload
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"Where are workflow files stored?","retrieval_mode":"hybrid","top_k":4}'
+```
+
+The response includes `retrieval.mode`, `retrieval.chunk_ids`, answer citations,
+and a trace payload for debugging.
+
+Try an unsupported question:
+
+```bash
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What are GitHub Actions billing minute limits?","retrieval_mode":"semantic"}'
+```
+
+Expected answer shape:
+
+```text
+The answer is not available in the retrieved context.
+```
+
+Run the quality gate:
+
+```bash
+python evals/run_ragas.py --config configs/settings.toml
+```
+
+Expected output includes:
+
+```text
+RAG evaluation report
+mode=deterministic
+faithfulness=1.00
+faithfulness passed: 1.00 >= 0.90
+```
+
+For a hiring review, start with [Architecture](docs/ARCHITECTURE.md), then scan
+[Testing Strategy](docs/TESTING.md), [Golden Evaluation Dataset](evals/README.md),
+[Reranking](docs/RERANKING.md), [Online Evaluation](docs/ONLINE_EVALUATION.md),
+and [Failure Modes](docs/FAILURE_MODES.md).
+
 ## Project Status
 
 Implemented:
@@ -103,8 +180,6 @@ Implemented:
   metadata permissions, feedback monitoring, Docker packaging, and security
   checks.
 
-Next setup issue: #22, testing strategy and baseline test documentation.
-
 ## Documents
 
 - [PRD](docs/PRD.md)
@@ -114,4 +189,7 @@ Next setup issue: #22, testing strategy and baseline test documentation.
 - [Deployment](docs/DEPLOYMENT.md)
 - [Backup And Recovery](docs/BACKUP_RECOVERY.md)
 - [Drift Metrics](docs/DRIFT_METRICS.md)
+- [Reranking](docs/RERANKING.md)
+- [Online Evaluation](docs/ONLINE_EVALUATION.md)
+- [Failure Modes](docs/FAILURE_MODES.md)
 - [Golden Evaluation Dataset](evals/README.md)
