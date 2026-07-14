@@ -106,6 +106,38 @@ def test_query_endpoint_caches_repeated_query(monkeypatch):
     assert first["request_id"] != second["request_id"]
 
 
+def test_query_cache_is_isolated_by_auth_context(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("public-key:public,admin-key:public|admin"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    admin = client.post(
+        "/query",
+        headers={"X-API-Key": "admin-key"},
+        json={
+            "query": "payroll",
+            "top_k": 2,
+            "metadata_filters": {"document_id": "secret"},
+        },
+    ).json()
+    public = client.post(
+        "/query",
+        headers={"X-API-Key": "public-key"},
+        json={
+            "query": "payroll",
+            "top_k": 2,
+            "metadata_filters": {"document_id": "secret"},
+        },
+    ).json()
+
+    assert admin["cached"] is False
+    assert admin["retrieval"]["chunk_ids"] == ["secret:p0:c0"]
+    assert public["cached"] is False
+    assert public["retrieval"]["chunk_ids"] == []
+    assert len(routes.QUERY_CACHE.values) == 2
+
+
 def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
     routes.QUERY_CACHE.values.clear()
     monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())

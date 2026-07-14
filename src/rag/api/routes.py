@@ -201,7 +201,11 @@ def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_conte
         raise HTTPException(status_code=429, detail="rate limit exceeded")
 
     event = TraceEvent(request_id=request_id, query=safe_query)
-    cache_filters = {**(request.metadata_filters or {}), "_retrieval_mode": requested_mode}
+    cache_filters = {
+        **(request.metadata_filters or {}),
+        "_retrieval_mode": requested_mode,
+        "_auth_scope": auth_context.cache_scope(),
+    }
     cached_payload = QUERY_CACHE.get(safe_query, request.top_k, cache_filters)
     if cached_payload:
         cached_payload = {**cached_payload, "request_id": request_id, "cached": True}

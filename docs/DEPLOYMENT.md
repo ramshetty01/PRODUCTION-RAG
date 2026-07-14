@@ -43,6 +43,8 @@ Environment variables are documented in `.env.example`:
 - `RAG_API_KEYS`: optional comma-separated API key map in
   `key:role1|role2[:tenant]` format. If unset, local development requests run
   as `public`.
+- Query cache entries are scoped by authenticated subject, tenant, and derived
+  roles so restricted answers are not shared across authorization contexts.
 
 Local development can still use the virtual environment:
 

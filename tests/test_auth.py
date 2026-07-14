@@ -9,6 +9,7 @@ def test_parse_api_keys_derives_roles_and_tenant():
     assert contexts["public-key"].roles == {"public"}
     assert contexts["admin-key"].roles == {"public", "admin"}
     assert contexts["admin-key"].tenant_id == "tenant-a"
+    assert contexts["admin-key"].cache_scope() == "tenant-a:api-key:admin-:admin|public"
 
 
 def test_authenticate_api_key_uses_dev_public_when_unconfigured():

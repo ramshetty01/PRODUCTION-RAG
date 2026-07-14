@@ -9,6 +9,10 @@ class AuthContext:
     roles: set[str]
     tenant_id: str = "default"
 
+    def cache_scope(self) -> str:
+        roles = "|".join(sorted(self.roles))
+        return f"{self.tenant_id}:{self.subject}:{roles}"
+
 
 def parse_api_keys(raw: str) -> dict[str, AuthContext]:
     contexts = {}
