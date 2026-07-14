@@ -40,6 +40,9 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_RERANKER_MODEL=cross-encoder/test",
                 "RAG_RERANKER_ALLOW_FALLBACK=false",
                 "RAG_API_KEYS=public-key:public,admin-key:public|admin:tenant-a",
+                "RAG_CACHE_BACKEND=redis",
+                "RAG_RATE_LIMIT_BACKEND=redis",
+                "RAG_REDIS_URL=redis://localhost:6379/0",
             ]
         ),
         encoding="utf-8",
@@ -57,6 +60,9 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.reranker_model == "cross-encoder/test"
     assert settings.reranker_allow_fallback is False
     assert settings.api_keys == "public-key:public,admin-key:public|admin:tenant-a"
+    assert settings.cache_backend == "redis"
+    assert settings.rate_limit_backend == "redis"
+    assert settings.redis_url == "redis://localhost:6379/0"
 
 
 def test_env_example_documents_required_runtime_settings():
@@ -69,3 +75,6 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_LLM_PROVIDER=" in env_example
     assert "RAG_RERANKER_PROVIDER=" in env_example
     assert "RAG_API_KEYS=" in env_example
+    assert "RAG_CACHE_BACKEND=" in env_example
+    assert "RAG_RATE_LIMIT_BACKEND=" in env_example
+    assert "RAG_REDIS_URL=" in env_example
