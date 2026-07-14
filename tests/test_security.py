@@ -1,6 +1,6 @@
 import pytest
 
-from src.rag.security import RateLimiter, contains_prompt_injection, redact_pii, validate_query
+from src.rag.security import RateLimiter, contains_prompt_injection, redact_pii, validate_path, validate_query
 
 
 def test_prompt_injection_detection_blocks_unsafe_queries():
@@ -23,3 +23,13 @@ def test_rate_limiter_blocks_after_limit():
     assert limiter.allow("client") is True
     assert limiter.allow("client") is True
     assert limiter.allow("client") is False
+
+
+def test_validate_path_rejects_paths_outside_allowed_root(tmp_path):
+    inside = tmp_path / "data" / "file.txt"
+    inside.parent.mkdir()
+    inside.write_text("ok", encoding="utf-8")
+
+    assert validate_path("data/file.txt", tmp_path) == inside.resolve()
+    with pytest.raises(ValueError, match="outside allowed root"):
+        validate_path("../outside.txt", tmp_path)
