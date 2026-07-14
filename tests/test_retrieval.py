@@ -2,6 +2,7 @@ from langchain_core.documents import Document
 
 from src.rag.generation import REFUSAL_ANSWER, generate_answer
 from src.rag.advanced.exact_search import exact_search
+from src.rag.advanced.sparse_embeddings import sparse_search
 from src.rag.hybrid_search import BM25Index, hybrid_search
 from src.rag.prompts import PromptBundle, load_prompt_bundle
 from src.rag.reranking import LexicalReranker, rerank_chunks
@@ -12,6 +13,7 @@ from src.rag.retrieval import (
     retrieve_exact_chunks,
     retrieve_hybrid_chunks,
     retrieve_reranked_chunks,
+    retrieve_sparse_chunks,
 )
 
 
@@ -169,6 +171,31 @@ def test_bm25_keyword_search_finds_exact_terms():
     results = BM25Index(docs).search("E123", top_k=1)
 
     assert [result.document.metadata["chunk_id"] for result in results] == ["docs:p0:c1"]
+
+
+def test_sparse_search_ranks_lexical_identifier_without_vectorstore():
+    docs = [
+        make_doc("General deployment workflow guidance.", "docs:p0:c0"),
+        make_doc("Incident code ZX-144 requires cache rebuild.", "docs:p0:c1"),
+    ]
+
+    results = sparse_search("ZX-144 cache", docs, top_k=1)
+
+    assert results[0].document.metadata["chunk_id"] == "docs:p0:c1"
+    assert results[0].source == "sparse_tfidf"
+
+
+def test_retrieve_sparse_chunks_is_available_as_optional_mode():
+    docs = [
+        make_doc("General deployment workflow guidance.", "docs:p0:c0"),
+        make_doc("Incident code ZX-144 requires cache rebuild.", "docs:p0:c1"),
+    ]
+
+    direct = retrieve_sparse_chunks("ZX-144", docs, top_k=1)
+    by_mode = retrieve_by_mode("ZX-144", mode="sparse", documents=docs, top_k=1)
+
+    assert direct == [docs[1]]
+    assert by_mode == [docs[1]]
 
 
 def test_hybrid_search_combines_vector_and_keyword_results_without_duplicates():

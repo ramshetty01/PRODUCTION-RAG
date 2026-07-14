@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.rag.advanced.exact_search import exact_search
+from src.rag.advanced.sparse_embeddings import sparse_search
 from src.rag.citations import citation_id_for_chunk
 from src.rag.chunking import DEFAULT_DB_PATH
 from src.rag.hybrid_search import hybrid_search
@@ -103,6 +104,18 @@ def retrieve_exact_chunks(
     return filter_authorized_chunks(chunks, metadata_filters=metadata_filters, user_roles=user_roles)[:top_k]
 
 
+def retrieve_sparse_chunks(
+    query: str,
+    documents,
+    top_k: int = DEFAULT_TOP_K,
+    metadata_filters: dict | None = None,
+    user_roles=None,
+):
+    matches = sparse_search(query, documents, top_k=top_k)
+    chunks = [match.document for match in matches]
+    return filter_authorized_chunks(chunks, metadata_filters=metadata_filters, user_roles=user_roles)[:top_k]
+
+
 def retrieve_by_mode(
     query: str,
     mode: str,
@@ -117,6 +130,8 @@ def retrieve_by_mode(
         return retrieve_chunks(query, vectorstore, top_k=top_k)
     if mode == "hybrid":
         return retrieve_hybrid_chunks(query, vectorstore, documents, top_k=top_k)
+    if mode == "sparse":
+        return retrieve_sparse_chunks(query, documents, top_k=top_k)
     raise ValueError(f"Unsupported retrieval mode: {mode}")
 
 
