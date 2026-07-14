@@ -36,4 +36,4 @@ jobs:
 
       - name: Run offline RAG evaluation
         run: |
-          python evals/run_ragas.py --min-faithfulness 0.90
+          python evals/run_ragas.py --config configs/settings.toml

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from evals.run_ragas import evaluate_dataset, load_dataset
+from evals.run_ragas import evaluate_dataset, load_dataset, load_quality_threshold, quality_gate
 
 
 GOLDEN_DATASET = Path(__file__).resolve().parents[1] / "evals" / "golden.jsonl"
@@ -55,3 +55,20 @@ def test_offline_eval_reports_quality_metrics():
     assert metrics["context_precision"] == 1.0
     assert metrics["answer_relevance"] == 1.0
     assert metrics["citation_coverage"] == 1.0
+
+
+def test_quality_gate_passes_or_fails_against_threshold():
+    passing, pass_message = quality_gate({"faithfulness": 0.90}, min_faithfulness=0.90)
+    failing, fail_message = quality_gate({"faithfulness": 0.89}, min_faithfulness=0.90)
+
+    assert passing is True
+    assert pass_message == "faithfulness passed: 0.90 >= 0.90"
+    assert failing is False
+    assert fail_message == "faithfulness failed: 0.89 < 0.90"
+
+
+def test_quality_threshold_loads_from_versioned_config(tmp_path):
+    config = tmp_path / "settings.toml"
+    config.write_text("[evaluation]\nmin_faithfulness = 0.91\n", encoding="utf-8")
+
+    assert load_quality_threshold(config) == 0.91
