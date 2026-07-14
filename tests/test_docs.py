@@ -25,6 +25,9 @@ def test_testing_strategy_documents_baseline_test_command():
     assert "Chroma persistence" in testing
     assert ".github/workflows/rag-eval.yml" in testing
     assert "prompt hardening" in testing.lower()
+    assert ".github/workflows/security-scan.yml" in testing
+    assert "pip-audit -r requirements.txt" in testing
+    assert "trivy fs ." in testing
 
 
 def test_readme_documents_runtime_configuration():

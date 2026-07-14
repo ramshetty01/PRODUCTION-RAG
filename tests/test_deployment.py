@@ -31,7 +31,6 @@ def test_deployment_docs_include_build_run_and_health_commands():
     assert "deploy/kubernetes" in docs
     assert "curl http://localhost:8000/health" in docs
 
-
 def test_docker_compose_defines_persistent_api_service():
     compose = (ROOT / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
 
@@ -65,3 +64,16 @@ def test_kubernetes_manifests_define_production_runtime_contract():
     assert "RAG_API_KEYS:" in secret
     assert "kind: PersistentVolumeClaim" in pvc
     assert "storage: 5Gi" in pvc
+
+
+def test_security_scan_workflow_audits_dependencies_and_container_surface():
+    workflow = (ROOT / ".github" / "workflows" / "security-scan.yml").read_text(encoding="utf-8")
+
+    assert "pip-audit==2.7.3" in workflow
+    assert "pip-audit -r requirements.txt" in workflow
+    assert "pip-audit-report.json" in workflow
+    assert "aquasecurity/trivy-action@v0.36.0" in workflow
+    assert "scan-type: fs" in workflow
+    assert "severity: CRITICAL,HIGH" in workflow
+    assert "trivy-report.json" in workflow
+    assert "actions/upload-artifact@v4" in workflow
