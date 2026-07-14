@@ -48,4 +48,9 @@ def generate_answer(query: str, chunks, llm=None, prompts: PromptBundle | None =
     llm = llm or ExtractiveLLMClient(fallback=prompts.refusal)
     prompt = build_rag_prompt(query, chunks, prompts=prompts)
     answer = llm.generate(prompt)
-    return enforce_grounded_answer(answer, chunks, refusal_answer=prompts.refusal)
+    response = enforce_grounded_answer(answer, chunks, refusal_answer=prompts.refusal)
+    response["token_usage"] = {
+        "prompt_tokens": len(prompt.split()),
+        "answer_tokens": len(response["answer"].split()),
+    }
+    return response

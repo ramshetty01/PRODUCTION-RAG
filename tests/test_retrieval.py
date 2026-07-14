@@ -146,8 +146,10 @@ def test_generate_answer_refuses_uncited_or_unretrieved_claims():
         llm=RecordingLLM("A workflow runs builds. [docs:p9:c9]"),
     )
 
-    assert uncited == {"answer": REFUSAL_ANSWER, "citations": []}
-    assert hallucinated_citation == {"answer": REFUSAL_ANSWER, "citations": []}
+    assert uncited["answer"] == REFUSAL_ANSWER
+    assert uncited["citations"] == []
+    assert hallucinated_citation["answer"] == REFUSAL_ANSWER
+    assert hallucinated_citation["citations"] == []
 
 
 def test_bm25_keyword_search_finds_exact_terms():
