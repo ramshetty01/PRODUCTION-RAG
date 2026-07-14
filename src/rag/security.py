@@ -63,3 +63,38 @@ class RateLimiter:
             return False
         window.append(now)
         return True
+
+
+class RedisRateLimiter:
+    def __init__(self, redis_url: str, max_requests: int = 60, window_seconds: int = 60, prefix: str = "rag:rate"):
+        from redis import Redis
+
+        self.client = Redis.from_url(redis_url, decode_responses=True)
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+        self.prefix = prefix
+
+    def allow(self, key: str) -> bool:
+        now = int(time.time())
+        bucket = now // self.window_seconds
+        redis_key = f"{self.prefix}:{key}:{bucket}"
+        count = self.client.incr(redis_key)
+        if count == 1:
+            self.client.expire(redis_key, self.window_seconds)
+        return int(count) <= self.max_requests
+
+
+def build_rate_limiter(
+    backend: str = "memory",
+    redis_url: str = "",
+    max_requests: int = 60,
+    window_seconds: int = 60,
+):
+    backend = backend.lower()
+    if backend == "memory":
+        return RateLimiter(max_requests=max_requests, window_seconds=window_seconds)
+    if backend == "redis":
+        if not redis_url:
+            raise ValueError("redis_url is required for Redis rate limiter")
+        return RedisRateLimiter(redis_url, max_requests=max_requests, window_seconds=window_seconds)
+    raise ValueError(f"Unsupported rate limiter backend: {backend}")

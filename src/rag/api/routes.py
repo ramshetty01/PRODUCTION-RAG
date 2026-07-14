@@ -22,10 +22,10 @@ from src.rag.observability import (
     structured_request_log,
     trace_latency,
 )
-from src.rag.performance import QueryCache, estimate_llm_cost
+from src.rag.performance import build_query_cache, estimate_llm_cost
 from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode
-from src.rag.security import RateLimiter, validate_path, validate_query
+from src.rag.security import build_rate_limiter, validate_path, validate_query
 from src.rag.vector_store import build_chroma_db, count_records
 
 
@@ -106,8 +106,8 @@ class MonitoringResponse(BaseModel):
 
 
 router = APIRouter()
-QUERY_CACHE = QueryCache()
-RATE_LIMITER = RateLimiter(max_requests=120, window_seconds=60)
+QUERY_CACHE = build_query_cache(SETTINGS.cache_backend, SETTINGS.redis_url)
+RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_url, max_requests=120, window_seconds=60)
 METRICS = MetricsRegistry()
 
 

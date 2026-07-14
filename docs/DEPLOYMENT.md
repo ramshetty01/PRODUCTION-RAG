@@ -70,6 +70,9 @@ Environment variables are documented in `.env.example`:
   roles so restricted answers are not shared across authorization contexts.
 - API request paths are resolved under the project root and traversal outside
   that root is rejected. Prefer server-side configured paths in production.
+- `RAG_CACHE_BACKEND` and `RAG_RATE_LIMIT_BACKEND`: `memory` by default, or
+  `redis` for shared multi-worker deployments.
+- `RAG_REDIS_URL`: Redis connection URL used when either backend is `redis`.
 
 Local development can still use the virtual environment:
 
