@@ -1,0 +1,64 @@
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.rag.chunking import (
+    DEFAULT_CHUNK_OVERLAP_TOKENS,
+    DEFAULT_CHUNK_TOKENS,
+    DEFAULT_DB_PATH,
+    DEFAULT_PDF_PATH,
+    build_chroma_db,
+    chunk_pdf,
+    count_tokens,
+)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Ingest a PDF into retrieval-ready chunks.")
+    parser.add_argument("--pdf", default=str(DEFAULT_PDF_PATH), help="Path to the source PDF.")
+    parser.add_argument(
+        "--persist-dir",
+        default=str(DEFAULT_DB_PATH),
+        help="Directory where ChromaDB should be written.",
+    )
+    parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_TOKENS)
+    parser.add_argument("--chunk-overlap", type=int, default=DEFAULT_CHUNK_OVERLAP_TOKENS)
+    parser.add_argument(
+        "--build-vector-db",
+        action="store_true",
+        help="Also build ChromaDB after splitting. This belongs to the vector storage step.",
+    )
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    chunks = chunk_pdf(
+        args.pdf,
+        chunk_size=args.chunk_size,
+        chunk_overlap=args.chunk_overlap,
+    )
+    token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
+
+    print(f"Loaded {Path(args.pdf).name}")
+    print(f"Created {len(chunks)} chunks")
+    if token_counts:
+        print(
+            "Token counts: "
+            f"min={min(token_counts)}, max={max(token_counts)}, "
+            f"target={args.chunk_size}, overlap={args.chunk_overlap}"
+        )
+
+    if args.build_vector_db:
+        build_chroma_db(chunks, persist_directory=Path(args.persist_dir))
+        print(f"Saved Chroma database to {args.persist_dir}")
+
+
+if __name__ == "__main__":
+    main()
