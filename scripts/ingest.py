@@ -13,10 +13,10 @@ from src.rag.chunking import (
     DEFAULT_CHUNK_TOKENS,
     DEFAULT_DB_PATH,
     DEFAULT_PDF_PATH,
-    build_chroma_db,
     chunk_pdf,
     count_tokens,
 )
+from src.rag.vector_store import build_chroma_db, count_records
 
 
 def parse_args():
@@ -56,8 +56,9 @@ def main():
         )
 
     if args.build_vector_db:
-        build_chroma_db(chunks, persist_directory=Path(args.persist_dir))
+        vectorstore = build_chroma_db(chunks, persist_directory=Path(args.persist_dir))
         print(f"Saved Chroma database to {args.persist_dir}")
+        print(f"Chroma records: {count_records(vectorstore)}")
 
 
 if __name__ == "__main__":
