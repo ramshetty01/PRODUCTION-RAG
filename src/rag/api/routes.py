@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, count_tokens
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
+from src.rag.monitoring import DEFAULT_FEEDBACK_LOG, FeedbackEvent, append_feedback, load_feedback, monitoring_metrics
 from src.rag.observability import TraceEvent, chunk_ids, citation_ids, new_request_id, trace_latency
 from src.rag.performance import QueryCache, estimate_llm_cost
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_chunks
@@ -60,6 +61,26 @@ class QueryResponse(BaseModel):
     retrieval: dict
     trace: dict
     cached: bool = False
+
+
+class FeedbackRequest(BaseModel):
+    request_id: str
+    query: str
+    answer: str
+    helpful: bool
+    citations: list[str] = Field(default_factory=list)
+    latency_ms: float | None = None
+    note: str | None = None
+    feedback_path: str = Field(default=str(DEFAULT_FEEDBACK_LOG))
+
+
+class FeedbackResponse(BaseModel):
+    status: str
+    request_id: str
+
+
+class MonitoringResponse(BaseModel):
+    metrics: dict
 
 
 router = APIRouter()
@@ -153,6 +174,26 @@ def query(request: QueryRequest):
     except Exception as exc:
         event.error = type(exc).__name__
         raise HTTPException(status_code=400, detail={"message": str(exc), "trace": event.to_log_dict()}) from exc
+
+
+@router.post("/feedback", response_model=FeedbackResponse)
+def feedback(request: FeedbackRequest):
+    event = FeedbackEvent(
+        request_id=request.request_id,
+        query=request.query,
+        answer=request.answer,
+        helpful=request.helpful,
+        citations=request.citations,
+        latency_ms=request.latency_ms,
+        note=request.note,
+    )
+    append_feedback(event, request.feedback_path)
+    return FeedbackResponse(status="recorded", request_id=request.request_id)
+
+
+@router.get("/monitoring", response_model=MonitoringResponse)
+def monitoring(feedback_path: str = str(DEFAULT_FEEDBACK_LOG)):
+    return MonitoringResponse(metrics=monitoring_metrics(load_feedback(feedback_path)))
 
 
 def create_app() -> FastAPI:
