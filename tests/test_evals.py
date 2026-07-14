@@ -30,8 +30,11 @@ def load_cases():
 def test_golden_dataset_has_initial_verified_examples():
     cases = load_cases()
 
-    assert len(cases) >= 5
+    assert len(cases) >= 50
     assert all(case["verified"] is True for case in cases)
+    assert {"factual", "lexical", "citation-heavy", "refusal", "multi-hop"} <= {
+        case["category"] for case in cases
+    }
 
 
 def test_golden_dataset_rows_have_required_schema():
