@@ -17,6 +17,8 @@ Current baseline tests cover:
 - Retrieval: vector retrieval, metadata filters, permissions, hybrid search, and
   reranking.
 - Citation grounding and refusal behavior.
+- Prompt hardening: delimiter use, instruction hierarchy, fake citations,
+  unsupported claims, and adversarial prompt attempts.
 - API behavior: health, query, feedback, monitoring, and structured errors.
 - Evaluation: golden dataset schema, offline scoring, and quality gate.
 - Operations: lifecycle manifest, deployment artifacts, observability,

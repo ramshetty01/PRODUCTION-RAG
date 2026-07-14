@@ -24,6 +24,7 @@ def test_testing_strategy_documents_baseline_test_command():
     assert "Chunking" in testing
     assert "Chroma persistence" in testing
     assert ".github/workflows/rag-eval.yml" in testing
+    assert "prompt hardening" in testing.lower()
 
 
 def test_readme_documents_runtime_configuration():
