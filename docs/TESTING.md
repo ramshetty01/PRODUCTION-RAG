@@ -36,6 +36,19 @@ Pull requests run the full `python -m pytest` suite through
 `.github/workflows/rag-eval.yml` and then execute the offline RAG evaluation
 gate.
 
+Dependency or container changes also run `.github/workflows/security-scan.yml`.
+That workflow audits Python dependencies with `pip-audit` and scans the
+repository, including the Dockerfile, with Trivy.
+
+Run the same scans locally before changing production dependencies or container
+settings:
+
+```bash
+python -m pip install pip-audit==2.7.3
+pip-audit -r requirements.txt --progress-spinner off
+trivy fs .
+```
+
 ## Adding Tests
 
 When adding behavior, include a focused test near the behavior owner:

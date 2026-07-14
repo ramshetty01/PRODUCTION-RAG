@@ -28,3 +28,13 @@ def test_deployment_docs_include_build_run_and_health_commands():
     assert "docker build -t production-rag ." in docs
     assert "docker run --rm -p 8000:8000" in docs
     assert "curl http://localhost:8000/health" in docs
+
+
+def test_security_scan_workflow_audits_dependencies_and_container_surface():
+    workflow = (ROOT / ".github" / "workflows" / "security-scan.yml").read_text(encoding="utf-8")
+
+    assert "pip-audit==2.7.3" in workflow
+    assert "pip-audit -r requirements.txt" in workflow
+    assert "aquasecurity/trivy-action@0.24.0" in workflow
+    assert "scan-type: fs" in workflow
+    assert "severity: CRITICAL,HIGH" in workflow
