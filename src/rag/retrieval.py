@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.rag.advanced.exact_search import exact_search
+from src.rag.citations import citation_id_for_chunk
 from src.rag.chunking import DEFAULT_DB_PATH
 from src.rag.hybrid_search import hybrid_search
 from src.rag.reranking import rerank_chunks
@@ -75,6 +77,7 @@ def retrieve_hybrid_chunks(
     metadata_filters: dict | None = None,
     user_roles=None,
 ):
+    exact_documents = [match.document for match in exact_search(query, keyword_documents, top_k=top_k)]
     candidates = hybrid_search(
         query=query,
         vectorstore=vectorstore,
@@ -83,7 +86,38 @@ def retrieve_hybrid_chunks(
         vector_weight=vector_weight,
         keyword_weight=keyword_weight,
     )
+    exact_seen = {citation_id_for_chunk(chunk) for chunk in exact_documents}
+    candidates = [*exact_documents, *[chunk for chunk in candidates if citation_id_for_chunk(chunk) not in exact_seen]]
     return filter_authorized_chunks(candidates, metadata_filters=metadata_filters, user_roles=user_roles)[:top_k]
+
+
+def retrieve_exact_chunks(
+    query: str,
+    documents,
+    top_k: int = DEFAULT_TOP_K,
+    metadata_filters: dict | None = None,
+    user_roles=None,
+):
+    matches = exact_search(query, documents, top_k=top_k)
+    chunks = [match.document for match in matches]
+    return filter_authorized_chunks(chunks, metadata_filters=metadata_filters, user_roles=user_roles)[:top_k]
+
+
+def retrieve_by_mode(
+    query: str,
+    mode: str,
+    vectorstore=None,
+    documents=None,
+    top_k: int = DEFAULT_TOP_K,
+):
+    documents = documents or []
+    if mode == "exact":
+        return retrieve_exact_chunks(query, documents, top_k=top_k)
+    if mode == "semantic":
+        return retrieve_chunks(query, vectorstore, top_k=top_k)
+    if mode == "hybrid":
+        return retrieve_hybrid_chunks(query, vectorstore, documents, top_k=top_k)
+    raise ValueError(f"Unsupported retrieval mode: {mode}")
 
 
 def retrieve_reranked_chunks(
