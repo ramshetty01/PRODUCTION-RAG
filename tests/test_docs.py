@@ -81,3 +81,14 @@ def test_backup_recovery_documents_generated_state_and_rebuild():
     assert "evals/golden.jsonl" in recovery
     assert ".env" in recovery
     assert "[Backup And Recovery](docs/BACKUP_RECOVERY.md)" in readme
+
+
+def test_drift_metrics_doc_defines_signals_and_thresholds():
+    drift = (ROOT / "docs" / "DRIFT_METRICS.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "Query distribution" in drift
+    assert "No-answer rate" in drift
+    assert "citation_coverage_min" in drift
+    assert "configs/settings.toml" in drift
+    assert "[Drift Metrics](docs/DRIFT_METRICS.md)" in readme
