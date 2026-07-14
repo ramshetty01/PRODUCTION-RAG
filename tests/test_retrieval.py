@@ -1,6 +1,6 @@
 from langchain_core.documents import Document
 
-from src.rag.generation import generate_answer
+from src.rag.generation import REFUSAL_ANSWER, generate_answer
 from src.rag.hybrid_search import BM25Index, hybrid_search
 from src.rag.retrieval import retrieve_chunks, retrieve_hybrid_chunks
 
@@ -61,6 +61,26 @@ def test_generate_answer_sends_query_and_context_to_llm_with_citations():
     assert "A runner executes jobs." in llm.prompts[0]
     assert response["answer"] == "A job is a set of steps in a workflow. [docs:p1:c2]"
     assert [citation["id"] for citation in response["citations"]] == ["docs:p1:c2"]
+
+
+def test_generate_answer_refuses_when_no_chunks_are_available():
+    response = generate_answer("What is outside the docs?", [], llm=RecordingLLM("Invented answer."))
+
+    assert response == {"answer": REFUSAL_ANSWER, "citations": []}
+
+
+def test_generate_answer_refuses_uncited_or_unretrieved_claims():
+    chunks = [make_doc("A workflow is an automated process.", "docs:p1:c2")]
+
+    uncited = generate_answer("What is a workflow?", chunks, llm=RecordingLLM("A workflow runs builds."))
+    hallucinated_citation = generate_answer(
+        "What is a workflow?",
+        chunks,
+        llm=RecordingLLM("A workflow runs builds. [docs:p9:c9]"),
+    )
+
+    assert uncited == {"answer": REFUSAL_ANSWER, "citations": []}
+    assert hallucinated_citation == {"answer": REFUSAL_ANSWER, "citations": []}
 
 
 def test_bm25_keyword_search_finds_exact_terms():
