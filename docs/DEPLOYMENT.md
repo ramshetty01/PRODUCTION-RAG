@@ -43,6 +43,9 @@ Environment variables are documented in `.env.example`:
 - `RAG_API_KEYS`: optional comma-separated API key map in
   `key:role1|role2[:tenant]` format. If unset, local development requests run
   as `public`.
+- `RAG_AUTH_MODE`: `dev`, `api_key`, or `jwt`.
+- `RAG_JWT_SECRET`, `RAG_JWT_ISSUER`, `RAG_JWT_AUDIENCE`: JWT validation
+  settings for signed bearer-token deployments.
 - Query cache entries are scoped by authenticated subject, tenant, and derived
   roles so restricted answers are not shared across authorization contexts.
 - API request paths are resolved under the project root and traversal outside
