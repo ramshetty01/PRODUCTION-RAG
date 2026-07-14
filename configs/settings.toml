@@ -1,5 +1,6 @@
 [evaluation]
 min_faithfulness = 0.90
+mode = "deterministic"
 
 [latency_budgets_ms]
 ingestion = 30000
