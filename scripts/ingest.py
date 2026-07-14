@@ -16,6 +16,13 @@ from src.rag.chunking import (
     chunk_pdf,
     count_tokens,
 )
+from src.rag.ingestion import (
+    DEFAULT_MANIFEST,
+    load_manifest,
+    plan_document_ingestion,
+    record_document_ingestion,
+    save_manifest,
+)
 from src.rag.vector_store import build_chroma_db, count_records
 
 
@@ -29,6 +36,7 @@ def parse_args():
     )
     parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_TOKENS)
     parser.add_argument("--chunk-overlap", type=int, default=DEFAULT_CHUNK_OVERLAP_TOKENS)
+    parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument(
         "--build-vector-db",
         action="store_true",
@@ -39,10 +47,17 @@ def parse_args():
 
 def main():
     args = parse_args()
+    manifest = load_manifest(args.manifest)
+    decision = plan_document_ingestion(args.pdf, manifest)
+    if not decision.should_reindex:
+        print(f"Skipped {Path(args.pdf).name}: unchanged document {decision.document_id}@{decision.document_version}")
+        return
+
     chunks = chunk_pdf(
         args.pdf,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
+        document_version=decision.document_version,
     )
     token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
 
@@ -59,6 +74,10 @@ def main():
         vectorstore = build_chroma_db(chunks, persist_directory=Path(args.persist_dir))
         print(f"Saved Chroma database to {args.persist_dir}")
         print(f"Chroma records: {count_records(vectorstore)}")
+
+    record_document_ingestion(manifest, decision, args.pdf, chunk_count=len(chunks))
+    save_manifest(manifest, args.manifest)
+    print(f"Recorded {decision.document_id}@{decision.document_version} in {args.manifest}")
 
 
 if __name__ == "__main__":
