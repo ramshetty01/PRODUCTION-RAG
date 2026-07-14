@@ -10,6 +10,13 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_LLM_PROVIDER",
         "RAG_RERANKER_PROVIDER",
         "RAG_API_KEYS",
+        "RAG_CACHE_BACKEND",
+        "RAG_RATE_LIMIT_BACKEND",
+        "RAG_REDIS_URL",
+        "RAG_AUTH_MODE",
+        "RAG_JWT_SECRET",
+        "RAG_JWT_ISSUER",
+        "RAG_JWT_AUDIENCE",
     ]:
         monkeypatch.delenv(key, raising=False)
 
@@ -22,6 +29,11 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.llm_provider == "extractive"
     assert settings.reranker_provider == "lexical"
     assert settings.api_keys == ""
+    assert settings.cache_backend == "memory"
+    assert settings.rate_limit_backend == "memory"
+    assert settings.redis_url == ""
+    assert settings.auth_mode == "auto"
+    assert settings.jwt_secret == ""
 
 
 def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
@@ -39,10 +51,14 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_RERANKER_PROVIDER=cross_encoder",
                 "RAG_RERANKER_MODEL=cross-encoder/test",
                 "RAG_RERANKER_ALLOW_FALLBACK=false",
+                "RAG_AUTH_MODE=jwt",
                 "RAG_API_KEYS=public-key:public,admin-key:public|admin:tenant-a",
                 "RAG_CACHE_BACKEND=redis",
                 "RAG_RATE_LIMIT_BACKEND=redis",
                 "RAG_REDIS_URL=redis://localhost:6379/0",
+                "RAG_JWT_SECRET=secret",
+                "RAG_JWT_ISSUER=issuer",
+                "RAG_JWT_AUDIENCE=rag-api",
             ]
         ),
         encoding="utf-8",
@@ -63,6 +79,10 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.cache_backend == "redis"
     assert settings.rate_limit_backend == "redis"
     assert settings.redis_url == "redis://localhost:6379/0"
+    assert settings.auth_mode == "jwt"
+    assert settings.jwt_secret == "secret"
+    assert settings.jwt_issuer == "issuer"
+    assert settings.jwt_audience == "rag-api"
 
 
 def test_env_example_documents_required_runtime_settings():
@@ -74,7 +94,9 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_RETRIEVAL_MODE=" in env_example
     assert "RAG_LLM_PROVIDER=" in env_example
     assert "RAG_RERANKER_PROVIDER=" in env_example
+    assert "RAG_AUTH_MODE=" in env_example
     assert "RAG_API_KEYS=" in env_example
     assert "RAG_CACHE_BACKEND=" in env_example
     assert "RAG_RATE_LIMIT_BACKEND=" in env_example
     assert "RAG_REDIS_URL=" in env_example
+    assert "RAG_JWT_SECRET=" in env_example

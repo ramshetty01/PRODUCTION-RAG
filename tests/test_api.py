@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 
+from src.rag.auth import sign_jwt
 from src.rag.api import routes
+from src.rag.config import RuntimeSettings
 
 
 class FakeVectorStore:
@@ -41,6 +43,7 @@ def test_health_endpoint_returns_status():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert response.headers["X-Request-ID"]
 
 
 def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
@@ -180,6 +183,43 @@ def test_query_endpoint_derives_admin_role_from_api_key(monkeypatch):
     assert body["retrieval"]["chunk_ids"] == ["secret:p0:c0"]
 
 
+def test_query_endpoint_derives_admin_role_from_jwt(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(auth_mode="jwt", jwt_secret="secret", jwt_issuer="issuer", jwt_audience="rag-api"),
+    )
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    token = sign_jwt(
+        {
+            "sub": "user-1",
+            "roles": ["public", "admin"],
+            "tenant_id": "tenant-a",
+            "iss": "issuer",
+            "aud": "rag-api",
+            "exp": 2_000_000_000,
+        },
+        "secret",
+    )
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/query",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "query": "payroll",
+            "top_k": 2,
+            "metadata_filters": {"document_id": "secret"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["retrieval"]["chunk_ids"] == ["secret:p0:c0"]
+    assert body["retrieval"]["auth_subject"] == "jwt:user-1"
+
+
 def test_query_endpoint_rejects_missing_and_invalid_api_key_when_configured(monkeypatch):
     routes.QUERY_CACHE.values.clear()
     monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("public-key:public"))
@@ -234,6 +274,20 @@ def test_query_endpoint_returns_clean_json_errors(monkeypatch):
     body = response.json()
     assert body["detail"]["message"] == "vector store missing"
     assert body["detail"]["trace"]["error"] == "RuntimeError"
+
+
+def test_metrics_endpoint_exports_prometheus_text():
+    routes.METRICS = routes.MetricsRegistry()
+    client = TestClient(routes.create_app())
+
+    client.get("/health")
+    response = client.get("/metrics", headers={"X-Request-ID": "req-metrics"})
+
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == "req-metrics"
+    assert response.headers["content-type"].startswith("text/plain")
+    assert "rag_api_requests_total" in response.text
+    assert 'rag_api_request_status_total{status_code="200"}' in response.text
 
 
 def test_query_endpoint_rejects_persist_dir_path_traversal():

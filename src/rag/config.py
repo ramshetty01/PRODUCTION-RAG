@@ -34,6 +34,10 @@ class RuntimeSettings:
     cache_backend: str = "memory"
     rate_limit_backend: str = "memory"
     redis_url: str = ""
+    auth_mode: str = "auto"
+    jwt_secret: str = ""
+    jwt_issuer: str = ""
+    jwt_audience: str = ""
 
 
 def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
@@ -93,4 +97,8 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         cache_backend=_setting_value(dotenv_values, "RAG_CACHE_BACKEND", "memory"),
         rate_limit_backend=_setting_value(dotenv_values, "RAG_RATE_LIMIT_BACKEND", "memory"),
         redis_url=_setting_value(dotenv_values, "RAG_REDIS_URL", ""),
+        auth_mode=_setting_value(dotenv_values, "RAG_AUTH_MODE", "auto"),
+        jwt_secret=_setting_value(dotenv_values, "RAG_JWT_SECRET", ""),
+        jwt_issuer=_setting_value(dotenv_values, "RAG_JWT_ISSUER", ""),
+        jwt_audience=_setting_value(dotenv_values, "RAG_JWT_AUDIENCE", ""),
     )
