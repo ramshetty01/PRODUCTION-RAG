@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, count_tokens
 from src.rag.generation import generate_answer
+from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
 from src.rag.observability import TraceEvent, chunk_ids, citation_ids, new_request_id, trace_latency
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_chunks
 from src.rag.vector_store import build_chroma_db, count_records
@@ -19,10 +20,15 @@ class HealthResponse(BaseModel):
 class IngestRequest(BaseModel):
     pdf_path: str = Field(default=str(DEFAULT_PDF_PATH))
     persist_dir: str = Field(default=str(DEFAULT_DB_PATH))
+    manifest_path: str = Field(default=str(DEFAULT_MANIFEST))
     build_vector_db: bool = True
 
 
 class IngestResponse(BaseModel):
+    document_id: str
+    document_version: str
+    status: str
+    reason: str
     chunks_created: int
     min_tokens: int | None
     max_tokens: int | None
@@ -65,13 +71,33 @@ def health():
 @router.post("/ingest", response_model=IngestResponse)
 def ingest(request: IngestRequest):
     try:
-        chunks = chunk_pdf(request.pdf_path)
+        manifest = load_manifest(request.manifest_path)
+        decision = plan_document_ingestion(request.pdf_path, manifest)
+        if not decision.should_reindex:
+            return IngestResponse(
+                document_id=decision.document_id,
+                document_version=decision.document_version,
+                status="skipped",
+                reason=decision.reason,
+                chunks_created=0,
+                min_tokens=None,
+                max_tokens=None,
+                vector_records=None,
+            )
+
+        chunks = chunk_pdf(request.pdf_path, document_version=decision.document_version)
         token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
         vector_records = None
         if request.build_vector_db:
             vectorstore = build_chroma_db(chunks, persist_directory=Path(request.persist_dir))
             vector_records = count_records(vectorstore)
+        record_document_ingestion(manifest, decision, request.pdf_path, chunk_count=len(chunks))
+        save_manifest(manifest, request.manifest_path)
         return IngestResponse(
+            document_id=decision.document_id,
+            document_version=decision.document_version,
+            status="indexed",
+            reason=decision.reason,
             chunks_created=len(chunks),
             min_tokens=min(token_counts) if token_counts else None,
             max_tokens=max(token_counts) if token_counts else None,
