@@ -44,6 +44,7 @@ def test_health_endpoint_returns_status():
 
 
 def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
     monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
     client = TestClient(routes.create_app())
 
@@ -64,9 +65,25 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["trace"]["citations"] == ["docs:p2:c3"]
     assert body["trace"]["latency_ms"] >= 0
     assert body["trace"]["token_usage"]["answer_tokens"] > 0
+    assert body["cached"] is False
+
+
+def test_query_endpoint_caches_repeated_query(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    first = client.post("/query", json={"query": "What does a runner do?", "top_k": 2}).json()
+    second = client.post("/query", json={"query": "What does a runner do?", "top_k": 2}).json()
+
+    assert first["cached"] is False
+    assert second["cached"] is True
+    assert first["answer"] == second["answer"]
+    assert first["request_id"] != second["request_id"]
 
 
 def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
     monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
     client = TestClient(routes.create_app())
 
@@ -86,6 +103,7 @@ def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
 
 
 def test_query_endpoint_returns_clean_json_errors(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
     def raise_error(_persist_dir):
         raise RuntimeError("vector store missing")
 
