@@ -1,0 +1,26 @@
+services:
+  rag-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: production-rag:latest
+    ports:
+      - "8000:8000"
+    environment:
+      RAG_HOST: 0.0.0.0
+      RAG_PORT: 8000
+      RAG_VECTOR_DB_PATH: /app/chroma_db
+      RAG_MANIFEST_PATH: /app/data/processed/ingestion_manifest.json
+      RAG_LOG_LEVEL: INFO
+    env_file:
+      - ../.env.example
+    volumes:
+      - ../chroma_db:/app/chroma_db
+      - ../data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: production-rag
+  labels:
+    app: production-rag
+spec:
+  type: ClusterIP
+  selector:
+    app: production-rag
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
