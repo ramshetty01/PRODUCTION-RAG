@@ -6,6 +6,7 @@ from fastapi import APIRouter, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, count_tokens
+from src.rag.config import load_settings
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
 from src.rag.monitoring import DEFAULT_FEEDBACK_LOG, FeedbackEvent, append_feedback, load_feedback, monitoring_metrics
@@ -16,14 +17,17 @@ from src.rag.security import RateLimiter, validate_query
 from src.rag.vector_store import build_chroma_db, count_records
 
 
+SETTINGS = load_settings()
+
+
 class HealthResponse(BaseModel):
     status: str
 
 
 class IngestRequest(BaseModel):
     pdf_path: str = Field(default=str(DEFAULT_PDF_PATH))
-    persist_dir: str = Field(default=str(DEFAULT_DB_PATH))
-    manifest_path: str = Field(default=str(DEFAULT_MANIFEST))
+    persist_dir: str = Field(default=SETTINGS.vector_db_path)
+    manifest_path: str = Field(default=SETTINGS.manifest_path)
     build_vector_db: bool = True
 
 
@@ -40,8 +44,8 @@ class IngestResponse(BaseModel):
 
 class QueryRequest(BaseModel):
     query: str = Field(min_length=1)
-    top_k: int = Field(default=DEFAULT_TOP_K, gt=0)
-    persist_dir: str = Field(default=str(DEFAULT_DB_PATH))
+    top_k: int = Field(default=SETTINGS.top_k, gt=0)
+    persist_dir: str = Field(default=SETTINGS.vector_db_path)
     metadata_filters: dict | None = None
     user_roles: list[str] = Field(default_factory=lambda: ["public"])
 
