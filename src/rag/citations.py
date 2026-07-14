@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
+
+
+_CITED_ID_PATTERN = re.compile(r"\[([^\[\]]+)\]")
+
+
+def extract_cited_ids(answer: str) -> list[str]:
+    return _CITED_ID_PATTERN.findall(answer)
 
 
 def _source_name(source: str) -> str:
