@@ -2,9 +2,7 @@ import re
 from pathlib import Path
 
 from langchain_core.documents import Document
-from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_huggingface import HuggingFaceEmbeddings
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -101,15 +99,6 @@ def chunk_pdf(
         docs,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-    )
-
-
-def build_chroma_db(chunks, persist_directory=DEFAULT_DB_PATH):
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-    return Chroma.from_documents(
-        documents=chunks,
-        embedding=embeddings,
-        persist_directory=str(persist_directory),
     )
 
 
