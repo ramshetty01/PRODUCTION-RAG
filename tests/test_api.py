@@ -51,6 +51,7 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
 
     assert response.status_code == 200
     body = response.json()
+    assert body["request_id"]
     assert body["answer"] == "A runner executes jobs. [docs:p2:c3]"
     assert body["citations"][0]["id"] == "docs:p2:c3"
     assert body["retrieval"] == {
@@ -58,6 +59,11 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
         "returned_chunks": 1,
         "chunk_ids": ["docs:p2:c3"],
     }
+    assert body["trace"]["request_id"] == body["request_id"]
+    assert body["trace"]["retrieved_chunk_ids"] == ["docs:p2:c3"]
+    assert body["trace"]["citations"] == ["docs:p2:c3"]
+    assert body["trace"]["latency_ms"] >= 0
+    assert body["trace"]["token_usage"]["answer_tokens"] > 0
 
 
 def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
@@ -89,4 +95,6 @@ def test_query_endpoint_returns_clean_json_errors(monkeypatch):
     response = client.post("/query", json={"query": "What does a runner do?"})
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "vector store missing"}
+    body = response.json()
+    assert body["detail"]["message"] == "vector store missing"
+    assert body["detail"]["trace"]["error"] == "RuntimeError"
