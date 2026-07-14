@@ -26,6 +26,9 @@ class RuntimeSettings:
     llm_provider: str = "extractive"
     llm_model: str = ""
     llm_api_key: str = ""
+    reranker_provider: str = "lexical"
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    reranker_allow_fallback: bool = True
 
 
 def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
@@ -51,6 +54,13 @@ def _setting_int(dotenv_values: dict[str, str], name: str, default: int) -> int:
     return int(value) if value not in (None, "") else default
 
 
+def _setting_bool(dotenv_values: dict[str, str], name: str, default: bool) -> bool:
+    value = os.getenv(name) or dotenv_values.get(name)
+    if value in (None, ""):
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
 def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
     dotenv_values = load_dotenv(dotenv_path) if dotenv_path else {}
     return RuntimeSettings(
@@ -66,4 +76,11 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         llm_provider=_setting_value(dotenv_values, "RAG_LLM_PROVIDER", "extractive"),
         llm_model=_setting_value(dotenv_values, "RAG_LLM_MODEL", ""),
         llm_api_key=_setting_value(dotenv_values, "RAG_LLM_API_KEY", ""),
+        reranker_provider=_setting_value(dotenv_values, "RAG_RERANKER_PROVIDER", "lexical"),
+        reranker_model=_setting_value(
+            dotenv_values,
+            "RAG_RERANKER_MODEL",
+            "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        ),
+        reranker_allow_fallback=_setting_bool(dotenv_values, "RAG_RERANKER_ALLOW_FALLBACK", True),
     )

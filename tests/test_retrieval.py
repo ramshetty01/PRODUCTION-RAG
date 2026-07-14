@@ -5,7 +5,7 @@ from src.rag.advanced.exact_search import exact_search
 from src.rag.advanced.sparse_embeddings import sparse_search
 from src.rag.hybrid_search import BM25Index, hybrid_search
 from src.rag.prompts import PromptBundle, load_prompt_bundle
-from src.rag.reranking import LexicalReranker, rerank_chunks
+from src.rag.reranking import CrossEncoderReranker, LexicalReranker, build_reranker, rerank_chunks
 from src.rag.retrieval import (
     filter_authorized_chunks,
     retrieve_by_mode,
@@ -293,3 +293,34 @@ def test_retrieve_reranked_chunks_reranks_hybrid_candidates():
     )
 
     assert results == [strong]
+
+
+def test_cross_encoder_reranker_scores_query_document_pairs():
+    class FakeCrossEncoder:
+        def __init__(self):
+            self.pairs = []
+
+        def predict(self, pairs):
+            self.pairs.extend(pairs)
+            return [0.87]
+
+    document = make_doc("A runner executes jobs on a machine.", "docs:p0:c6")
+    fake_model = FakeCrossEncoder()
+
+    score = CrossEncoderReranker(model=fake_model).score("runner executes jobs", document)
+
+    assert score == 0.87
+    assert fake_model.pairs == [("runner executes jobs", document.page_content)]
+
+
+def test_build_reranker_selects_lexical_provider():
+    assert isinstance(build_reranker("lexical"), LexicalReranker)
+
+
+def test_build_reranker_falls_back_when_cross_encoder_cannot_load(monkeypatch):
+    def fail_to_load(*args, **kwargs):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr("src.rag.reranking.CrossEncoderReranker", fail_to_load)
+
+    assert isinstance(build_reranker("cross_encoder", allow_fallback=True), LexicalReranker)
