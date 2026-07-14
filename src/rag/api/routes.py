@@ -32,6 +32,8 @@ class QueryRequest(BaseModel):
     query: str = Field(min_length=1)
     top_k: int = Field(default=DEFAULT_TOP_K, gt=0)
     persist_dir: str = Field(default=str(DEFAULT_DB_PATH))
+    metadata_filters: dict | None = None
+    user_roles: list[str] = Field(default_factory=lambda: ["public"])
 
 
 class CitationResponse(BaseModel):
@@ -80,7 +82,13 @@ def ingest(request: IngestRequest):
 def query(request: QueryRequest):
     try:
         vectorstore = load_vectorstore(request.persist_dir)
-        chunks = retrieve_chunks(request.query, vectorstore, top_k=request.top_k)
+        chunks = retrieve_chunks(
+            request.query,
+            vectorstore,
+            top_k=request.top_k,
+            metadata_filters=request.metadata_filters,
+            user_roles=set(request.user_roles),
+        )
         response = generate_answer(request.query, chunks)
         return QueryResponse(
             answer=response["answer"],

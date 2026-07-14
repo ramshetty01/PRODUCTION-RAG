@@ -63,6 +63,7 @@ def chunk_documents(
     docs,
     chunk_size=DEFAULT_CHUNK_TOKENS,
     chunk_overlap=DEFAULT_CHUNK_OVERLAP_TOKENS,
+    document_version: str = "v1",
 ):
     split_text = create_token_splitter(
         chunk_size=chunk_size,
@@ -74,6 +75,9 @@ def chunk_documents(
         source = doc.metadata.get("source", "")
         page = doc.metadata.get("page")
         source_path = str(Path(source).expanduser().resolve()) if source else ""
+        document_id = str(doc.metadata.get("document_id") or Path(source).stem or "document")
+        section = doc.metadata.get("section")
+        access_roles = doc.metadata.get("access_roles", ["public"])
 
         for chunk_text in split_text(doc.page_content):
             chunk_index = len(chunks)
@@ -81,8 +85,12 @@ def chunk_documents(
                 **doc.metadata,
                 "source": source_path,
                 "page": page,
+                "section": section,
+                "document_id": document_id,
+                "document_version": str(doc.metadata.get("document_version") or document_version),
+                "access_roles": access_roles,
                 "chunk_index": chunk_index,
-                "chunk_id": f"{Path(source).stem or 'document'}:p{page}:c{chunk_index}",
+                "chunk_id": f"{document_id}:p{page}:c{chunk_index}",
             }
             chunks.append(Document(page_content=chunk_text, metadata=chunk_metadata))
 
@@ -93,12 +101,14 @@ def chunk_pdf(
     file_path=DEFAULT_PDF_PATH,
     chunk_size=DEFAULT_CHUNK_TOKENS,
     chunk_overlap=DEFAULT_CHUNK_OVERLAP_TOKENS,
+    document_version: str = "v1",
 ):
     docs = load_pdf(file_path)
     return chunk_documents(
         docs,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
+        document_version=document_version,
     )
 
 

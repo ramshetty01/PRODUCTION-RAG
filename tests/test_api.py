@@ -8,12 +8,27 @@ class FakeVectorStore:
     def similarity_search(self, query, k):
         return [
             Document(
+                page_content="Private payroll data.",
+                metadata={
+                    "source": "/tmp/secret.pdf",
+                    "page": 0,
+                    "chunk_index": 0,
+                    "chunk_id": "secret:p0:c0",
+                    "document_id": "secret",
+                    "document_version": "v1",
+                    "access_roles": ["admin"],
+                },
+            ),
+            Document(
                 page_content="A runner executes jobs.",
                 metadata={
                     "source": "/tmp/docs.pdf",
                     "page": 2,
                     "chunk_index": 3,
                     "chunk_id": "docs:p2:c3",
+                    "document_id": "docs",
+                    "document_version": "v1",
+                    "access_roles": ["public"],
                 },
             )
         ][:k]
@@ -32,17 +47,36 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
     client = TestClient(routes.create_app())
 
-    response = client.post("/query", json={"query": "What does a runner do?", "top_k": 1})
+    response = client.post("/query", json={"query": "What does a runner do?", "top_k": 2})
 
     assert response.status_code == 200
     body = response.json()
     assert body["answer"] == "A runner executes jobs. [docs:p2:c3]"
     assert body["citations"][0]["id"] == "docs:p2:c3"
     assert body["retrieval"] == {
-        "top_k": 1,
+        "top_k": 2,
         "returned_chunks": 1,
         "chunk_ids": ["docs:p2:c3"],
     }
+
+
+def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/query",
+        json={
+            "query": "payroll",
+            "top_k": 2,
+            "metadata_filters": {"document_id": "secret"},
+            "user_roles": ["admin"],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["retrieval"]["chunk_ids"] == ["secret:p0:c0"]
 
 
 def test_query_endpoint_returns_clean_json_errors(monkeypatch):
