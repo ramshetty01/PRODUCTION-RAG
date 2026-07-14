@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, count_tokens
 from src.rag.generation import generate_answer
+from src.rag.observability import TraceEvent, chunk_ids, citation_ids, new_request_id, trace_latency
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_chunks
 from src.rag.vector_store import build_chroma_db, count_records
 
@@ -46,9 +47,11 @@ class CitationResponse(BaseModel):
 
 
 class QueryResponse(BaseModel):
+    request_id: str
     answer: str
     citations: list[CitationResponse]
     retrieval: dict
+    trace: dict
 
 
 router = APIRouter()
@@ -80,17 +83,25 @@ def ingest(request: IngestRequest):
 
 @router.post("/query", response_model=QueryResponse)
 def query(request: QueryRequest):
+    request_id = new_request_id()
+    event = TraceEvent(request_id=request_id, query=request.query)
     try:
-        vectorstore = load_vectorstore(request.persist_dir)
-        chunks = retrieve_chunks(
-            request.query,
-            vectorstore,
-            top_k=request.top_k,
-            metadata_filters=request.metadata_filters,
-            user_roles=set(request.user_roles),
-        )
-        response = generate_answer(request.query, chunks)
+        with trace_latency(event):
+            vectorstore = load_vectorstore(request.persist_dir)
+            chunks = retrieve_chunks(
+                request.query,
+                vectorstore,
+                top_k=request.top_k,
+                metadata_filters=request.metadata_filters,
+                user_roles=set(request.user_roles),
+            )
+            response = generate_answer(request.query, chunks)
+            event.retrieved_chunk_ids = chunk_ids(chunks)
+            event.answer = response["answer"]
+            event.citations = citation_ids(response["citations"])
+            event.token_usage = response.get("token_usage", {})
         return QueryResponse(
+            request_id=request_id,
             answer=response["answer"],
             citations=response["citations"],
             retrieval={
@@ -98,9 +109,11 @@ def query(request: QueryRequest):
                 "returned_chunks": len(chunks),
                 "chunk_ids": [chunk.metadata.get("chunk_id") for chunk in chunks],
             },
+            trace=event.to_log_dict(),
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        event.error = type(exc).__name__
+        raise HTTPException(status_code=400, detail={"message": str(exc), "trace": event.to_log_dict()}) from exc
 
 
 def create_app() -> FastAPI:
