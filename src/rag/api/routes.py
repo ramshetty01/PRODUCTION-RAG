@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, count_tokens
+from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_token_summary, count_tokens
 from src.rag.config import load_settings
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
@@ -40,6 +40,7 @@ class IngestResponse(BaseModel):
     min_tokens: int | None
     max_tokens: int | None
     vector_records: int | None
+    chunk_summary: dict | None = None
 
 
 class QueryRequest(BaseModel):
@@ -113,9 +114,15 @@ def ingest(request: IngestRequest):
                 min_tokens=None,
                 max_tokens=None,
                 vector_records=None,
+                chunk_summary=None,
             )
 
-        chunks = chunk_pdf(request.pdf_path, document_version=decision.document_version)
+        chunks = chunk_pdf(
+            request.pdf_path,
+            chunk_size=SETTINGS.chunk_size,
+            chunk_overlap=SETTINGS.chunk_overlap,
+            document_version=decision.document_version,
+        )
         token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
         vector_records = None
         if request.build_vector_db:
@@ -132,6 +139,7 @@ def ingest(request: IngestRequest):
             min_tokens=min(token_counts) if token_counts else None,
             max_tokens=max(token_counts) if token_counts else None,
             vector_records=vector_records,
+            chunk_summary=chunk_token_summary(chunks),
         )
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

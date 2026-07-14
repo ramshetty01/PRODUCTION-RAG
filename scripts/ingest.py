@@ -14,8 +14,10 @@ from src.rag.chunking import (
     DEFAULT_DB_PATH,
     DEFAULT_PDF_PATH,
     chunk_pdf,
+    chunk_token_summary,
     count_tokens,
 )
+from src.rag.config import load_settings
 from src.rag.ingestion import (
     DEFAULT_MANIFEST,
     load_manifest,
@@ -34,8 +36,8 @@ def parse_args():
         default=str(DEFAULT_DB_PATH),
         help="Directory where ChromaDB should be written.",
     )
-    parser.add_argument("--chunk-size", type=int, default=DEFAULT_CHUNK_TOKENS)
-    parser.add_argument("--chunk-overlap", type=int, default=DEFAULT_CHUNK_OVERLAP_TOKENS)
+    parser.add_argument("--chunk-size", type=int, default=None)
+    parser.add_argument("--chunk-overlap", type=int, default=None)
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument(
         "--build-vector-db",
@@ -47,6 +49,7 @@ def parse_args():
 
 def main():
     args = parse_args()
+    settings = load_settings()
     manifest = load_manifest(args.manifest)
     decision = plan_document_ingestion(args.pdf, manifest)
     if not decision.should_reindex:
@@ -55,11 +58,12 @@ def main():
 
     chunks = chunk_pdf(
         args.pdf,
-        chunk_size=args.chunk_size,
-        chunk_overlap=args.chunk_overlap,
+        chunk_size=args.chunk_size or settings.chunk_size,
+        chunk_overlap=args.chunk_overlap or settings.chunk_overlap,
         document_version=decision.document_version,
     )
     token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
+    summary = chunk_token_summary(chunks)
 
     print(f"Loaded {Path(args.pdf).name}")
     print(f"Created {len(chunks)} chunks")
@@ -67,8 +71,10 @@ def main():
         print(
             "Token counts: "
             f"min={min(token_counts)}, max={max(token_counts)}, "
-            f"target={args.chunk_size}, overlap={args.chunk_overlap}"
+            f"target={args.chunk_size or settings.chunk_size}, "
+            f"overlap={args.chunk_overlap or settings.chunk_overlap}"
         )
+        print(f"Chunk verification: {summary}")
 
     if args.build_vector_db:
         vectorstore = build_chroma_db(chunks, persist_directory=Path(args.persist_dir))
