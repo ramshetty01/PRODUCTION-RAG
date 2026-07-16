@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_text_file, chunk_token_summary, count_tokens
 from src.rag.config import load_settings
+from src.rag.evaluation_report import build_evaluation_report
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
 from src.rag.monitoring import DEFAULT_FEEDBACK_LOG, FeedbackEvent, append_feedback, load_feedback, monitoring_metrics
@@ -106,6 +107,15 @@ class FeedbackResponse(BaseModel):
 
 class MonitoringResponse(BaseModel):
     metrics: dict
+
+
+class EvaluationResponse(BaseModel):
+    generated_at: str
+    dataset: dict
+    config: dict
+    metrics: dict
+    quality_gate: dict
+    case_scores: list[dict]
 
 
 class UploadIngestResponse(BaseModel):
@@ -404,6 +414,11 @@ def feedback(request: FeedbackRequest):
 @router.get("/monitoring", response_model=MonitoringResponse)
 def monitoring(feedback_path: str = str(DEFAULT_FEEDBACK_LOG)):
     return MonitoringResponse(metrics=monitoring_metrics(load_feedback(_safe_api_path(feedback_path))))
+
+
+@router.get("/evaluation", response_model=EvaluationResponse)
+def evaluation_report():
+    return EvaluationResponse(**build_evaluation_report())
 
 
 @router.get("/metrics")

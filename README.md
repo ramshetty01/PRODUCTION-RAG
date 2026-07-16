@@ -172,6 +172,12 @@ Run the quality gate:
 python evals/run_ragas.py --config configs/settings.toml
 ```
 
+Export the same metrics shown in the browser quality dashboard:
+
+```bash
+python scripts/export_evaluation_report.py --output reports/evaluation-dashboard.json
+```
+
 Expected output includes:
 
 ```text
@@ -180,6 +186,12 @@ mode=deterministic
 faithfulness=1.00
 faithfulness passed: 1.00 >= 0.90
 ```
+
+The `/demo` quality panel and `/evaluation` endpoint summarize faithfulness,
+citation coverage, refusal accuracy, retrieval latency budget status, and the
+golden dataset size. For HR or hiring-manager demos, interpret a passing status
+as evidence that the current prompts, retrieval settings, and corpus still meet
+the committed quality threshold.
 
 For a hiring review, start with [Architecture](docs/ARCHITECTURE.md), then scan
 [Testing Strategy](docs/TESTING.md), [Golden Evaluation Dataset](evals/README.md),
