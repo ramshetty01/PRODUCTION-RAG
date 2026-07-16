@@ -4,6 +4,15 @@ Production RAG is a local-first retrieval augmented generation pipeline for
 ingesting documents, chunking them, storing embeddings in ChromaDB, retrieving
 evidence, and serving cited answers through a FastAPI API.
 
+## Reviewer Path
+
+- HR or hiring manager: open [Portfolio Guide](docs/PORTFOLIO.md), then watch
+  the flow in [Demo Video Script](docs/DEMO_VIDEO_SCRIPT.md).
+- Technical reviewer: start with [Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md),
+  then read [Architecture](docs/ARCHITECTURE.md), [Testing Strategy](docs/TESTING.md),
+  [Deployment](docs/DEPLOYMENT.md), and [Vector Database Selection](docs/VECTOR_DB_SELECTION.md).
+- Visual preview: [Demo Frontend Screenshot Asset](docs/assets/demo-frontend.svg).
+
 ## Requirements
 
 - Python 3.11 or newer.
@@ -211,7 +220,8 @@ Public or Admin preset and ask for protected payroll content. Public retrieval
 returns no admin-only chunks, while Admin retrieval can return chunks tagged
 with the `admin` role.
 
-For a hiring review, start with [Architecture](docs/ARCHITECTURE.md), then scan
+For a hiring review, start with [Portfolio Guide](docs/PORTFOLIO.md) and
+[Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md), then scan
 [Testing Strategy](docs/TESTING.md), [Golden Evaluation Dataset](evals/README.md),
 [Reranking](docs/RERANKING.md), [Online Evaluation](docs/ONLINE_EVALUATION.md),
 and [Failure Modes](docs/FAILURE_MODES.md).
@@ -232,6 +242,9 @@ Implemented:
 
 - [PRD](docs/PRD.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md)
+- [Portfolio Guide](docs/PORTFOLIO.md)
+- [Demo Video Script](docs/DEMO_VIDEO_SCRIPT.md)
 - [Testing Strategy](docs/TESTING.md)
 - [Pull Request Workflow](docs/PR_WORKFLOW.md)
 - [Deployment](docs/DEPLOYMENT.md)

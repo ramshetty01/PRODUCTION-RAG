@@ -1,5 +1,7 @@
 # Architecture
 
+For a visual overview, see [Architecture Diagram](ARCHITECTURE_DIAGRAM.md).
+
 ## Data Flow
 
 1. Source documents are stored in the repo root or `data/raw/`.

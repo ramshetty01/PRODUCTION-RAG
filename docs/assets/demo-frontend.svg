@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" role="img" aria-labelledby="title desc">
+  <title id="title">Production RAG demo frontend</title>
+  <desc id="desc">Screenshot-style asset showing the current demo console with auth, question, answer, evidence, retrieval trace, evaluation quality, and metrics panels.</desc>
+  <rect width="1280" height="820" fill="#07100d"/>
+  <path d="M120 110 310 70 370 235 180 285Z" fill="#0b8f58" opacity=".7"/>
+  <path d="M1008 610 1180 560 1212 730 1030 760Z" fill="#0c7d51" opacity=".8"/>
+  <rect x="72" y="54" width="1136" height="708" rx="18" fill="#10211b" opacity=".78" stroke="#83f4be" stroke-opacity=".35"/>
+  <rect x="72" y="54" width="1136" height="58" rx="18" fill="#050706"/>
+  <text x="104" y="90" fill="#f7fff9" font-family="Arial, sans-serif" font-size="18" font-weight="700">GPT + Enterprise Data</text>
+  <text x="875" y="90" fill="#a9b8b0" font-family="Arial, sans-serif" font-size="14">JWT/API key · Citations · Metrics · Docker</text>
+  <rect x="150" y="144" width="980" height="330" rx="36" fill="#1a3229" opacity=".84" stroke="#ffffff" stroke-opacity=".22"/>
+  <text x="566" y="196" text-anchor="middle" fill="#83f4be" font-family="Courier New, monospace" font-size="16">PRODUCTION RAG</text>
+  <text x="640" y="256" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="58" font-weight="300">Chat with your data</text>
+  <rect x="205" y="300" width="280" height="72" rx="8" fill="#ffffff" opacity=".14"/>
+  <rect x="500" y="300" width="280" height="72" rx="8" fill="#ffffff" opacity=".14"/>
+  <rect x="795" y="300" width="280" height="72" rx="8" fill="#ffffff" opacity=".14"/>
+  <text x="226" y="330" fill="#ffffff" font-family="Arial, sans-serif" font-size="18">What evidence is required</text>
+  <text x="226" y="354" fill="#ffffff" font-family="Arial, sans-serif" font-size="18">before vendor onboarding?</text>
+  <text x="521" y="342" fill="#ffffff" font-family="Arial, sans-serif" font-size="18">Protected payroll access</text>
+  <text x="816" y="342" fill="#ffffff" font-family="Arial, sans-serif" font-size="18">Authentication incidents</text>
+  <rect x="205" y="392" width="870" height="44" rx="8" fill="#ffffff" opacity=".1"/>
+  <text x="226" y="420" fill="#f7fff9" font-family="Courier New, monospace" font-size="14">Auth: API key · Credential · Public/Admin preset · api-key:admin- · admin|public</text>
+  <rect x="96" y="502" width="700" height="160" rx="14" fill="#08120f" stroke="#ffffff" stroke-opacity=".16"/>
+  <text x="124" y="538" fill="#83f4be" font-family="Courier New, monospace" font-size="14">GROUNDED RESPONSE</text>
+  <rect x="124" y="560" width="644" height="74" rx="10" fill="#f7fff9"/>
+  <text x="148" y="592" fill="#101813" font-family="Arial, sans-serif" font-size="22">Vendors that process customer data must provide</text>
+  <text x="148" y="620" fill="#101813" font-family="Arial, sans-serif" font-size="22">SOC 2 Type II evidence. [vendor-risk-policy:p0:c0]</text>
+  <rect x="820" y="502" width="364" height="160" rx="14" fill="#08120f" stroke="#ffffff" stroke-opacity=".16"/>
+  <text x="848" y="538" fill="#83f4be" font-family="Courier New, monospace" font-size="14">SOURCE EVIDENCE</text>
+  <rect x="848" y="560" width="308" height="72" rx="10" fill="#ffffff" opacity=".1"/>
+  <text x="868" y="590" fill="#ffffff" font-family="Arial, sans-serif" font-size="16">vendor-risk-policy:p0:c0</text>
+  <text x="868" y="616" fill="#a9b8b0" font-family="Arial, sans-serif" font-size="14">SOC 2 Type II evidence before onboarding.</text>
+  <rect x="96" y="686" width="1088" height="52" rx="14" fill="#08120f" stroke="#ffffff" stroke-opacity=".16"/>
+  <text x="124" y="718" fill="#a9b8b0" font-family="Courier New, monospace" font-size="14">API Online</text>
+  <text x="310" y="718" fill="#a9b8b0" font-family="Courier New, monospace" font-size="14">Requests 42</text>
+  <text x="510" y="718" fill="#a9b8b0" font-family="Courier New, monospace" font-size="14">Latency 184 ms</text>
+  <text x="752" y="718" fill="#a9b8b0" font-family="Courier New, monospace" font-size="14">Quality Passing · Faithfulness 100%</text>
+</svg>
