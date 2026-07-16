@@ -1,6 +1,7 @@
 from langchain_core.documents import Document
 
 from src.rag.generation import REFUSAL_ANSWER, generate_answer
+from src.rag.llm.client import LocalSynthesisLLMClient
 from src.rag.advanced.exact_search import exact_search
 from src.rag.advanced.sparse_embeddings import sparse_search
 from src.rag.hybrid_search import BM25Index, hybrid_search
@@ -108,6 +109,21 @@ def test_generate_answer_sends_query_and_context_to_llm_with_citations():
     assert "A runner executes jobs." in llm.prompts[0]
     assert response["answer"] == "A job is a set of steps in a workflow. [docs:p1:c2]"
     assert [citation["id"] for citation in response["citations"]] == ["docs:p1:c2"]
+
+
+def test_local_synthesis_generates_multi_sentence_grounded_answer():
+    chunks = [
+        make_doc("A job is a set of steps in a workflow.", "docs:p1:c2"),
+        make_doc("A runner executes jobs on a machine.", "docs:p2:c3"),
+    ]
+
+    response = generate_answer("Explain jobs and runners.", chunks, llm=LocalSynthesisLLMClient())
+
+    assert response["answer"] == (
+        "A job is a set of steps in a workflow. [docs:p1:c2]\n\n"
+        "A runner executes jobs on a machine. [docs:p2:c3]"
+    )
+    assert [citation["id"] for citation in response["citations"]] == ["docs:p1:c2", "docs:p2:c3"]
 
 
 def test_generation_loads_prompt_bundle_at_runtime():

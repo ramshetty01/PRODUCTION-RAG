@@ -118,6 +118,13 @@ OpenTelemetry tracing is disabled by default for local development. Set
 `RAG_OTEL_ENABLED=true` and `RAG_OTEL_EXPORTER_OTLP_ENDPOINT` when deploying
 behind an OTLP collector.
 
+For local generation quality, set `RAG_LLM_PROVIDER=local`. This uses the
+local evidence-synthesis generator, which can combine multiple retrieved chunks
+into a concise cited answer without calling a hosted model. Keep
+`RAG_LLM_PROVIDER=extractive` when you need the single-sentence deterministic
+fallback used by the unit tests. Hosted OpenAI-compatible providers remain
+available through `RAG_LLM_PROVIDER=openai` or `RAG_LLM_PROVIDER=openrouter`.
+
 Supported query retrieval modes are `semantic`, `exact`, `hybrid`, `sparse`,
 and `reranked`. Set the default with `RAG_RETRIEVAL_MODE`, or override it per API
 request:
