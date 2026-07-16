@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_readme_quickstart_documents_fresh_clone_flow():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
+    assert "Reviewer Path" in readme
     assert "python3 -m venv .venv" in readme
     assert "python -m pip install -r requirements.txt" in readme
     assert "python scripts/ingest.py --pdf docs.pdf --build-vector-db" in readme
@@ -15,6 +16,7 @@ def test_readme_quickstart_documents_fresh_clone_flow():
     assert "chroma_db/" in readme
     assert "[PRD](docs/PRD.md)" in readme
     assert "[Architecture](docs/ARCHITECTURE.md)" in readme
+    assert "[Portfolio Guide](docs/PORTFOLIO.md)" in readme
     assert "[Testing Strategy](docs/TESTING.md)" in readme
 
 
@@ -74,6 +76,7 @@ def test_prd_documents_product_phases_and_metrics():
 def test_architecture_documents_data_flow_and_interfaces():
     architecture = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
 
+    assert "Architecture Diagram" in architecture
     assert "Data Flow" in architecture
     assert "src/rag/chunking.py" in architecture
     assert "POST /query" in architecture
@@ -138,3 +141,22 @@ def test_deployment_docs_cover_opentelemetry_tracing():
     assert "RAG_OTEL_EXPORTER_OTLP_ENDPOINT" in deployment
     assert "rag.citation_enforcement" in deployment
     assert "OpenTelemetry tracing is disabled by default" in readme
+
+
+def test_portfolio_assets_package_reviewer_materials():
+    portfolio = (ROOT / "docs" / "PORTFOLIO.md").read_text(encoding="utf-8")
+    script = (ROOT / "docs" / "DEMO_VIDEO_SCRIPT.md").read_text(encoding="utf-8")
+    diagram = (ROOT / "docs" / "ARCHITECTURE_DIAGRAM.md").read_text(encoding="utf-8")
+    screenshot = (ROOT / "docs" / "assets" / "demo-frontend.svg").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "Five-Minute Reviewer Path" in portfolio
+    assert "Resume Bullets" in portfolio
+    assert "Key Tradeoffs" in portfolio
+    assert "Target length: 3 to 4 minutes" in script
+    assert "Can I retrieve protected payroll data?" in script
+    assert "flowchart LR" in diagram
+    assert "ChromaDB" in diagram
+    assert "Qdrant" in diagram
+    assert "Production RAG demo frontend" in screenshot
+    assert "Demo Frontend Screenshot Asset" in readme
