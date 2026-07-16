@@ -37,6 +37,44 @@ kubectl apply -f deploy/kubernetes/service.yaml
 Create a production secret from `deploy/kubernetes/secret.example.yaml` before
 starting the Deployment.
 
+## Public Demo Deployment
+
+Use `deploy/render.yaml` to publish the API and browser demo as a Render web
+service. The blueprint installs Python dependencies, starts the API through
+`deploy/render-start.sh`, mounts persistent storage at
+`/var/data/production-rag`, and optionally bootstraps the sample `docs.pdf`
+index on first startup.
+
+Expected public URL shape:
+
+```text
+https://production-rag-demo.onrender.com
+```
+
+Required reviewer endpoints:
+
+```bash
+curl https://production-rag-demo.onrender.com/health
+curl https://production-rag-demo.onrender.com/demo
+curl https://production-rag-demo.onrender.com/metrics
+curl -X POST https://production-rag-demo.onrender.com/query \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What is a GitHub Actions runner?","retrieval_mode":"semantic","top_k":4}'
+```
+
+Secrets must be configured in the hosting provider, not committed to git.
+`deploy/render.yaml` marks `RAG_API_KEYS`, `RAG_LLM_API_KEY`, and
+`RAG_JWT_SECRET` as manually synced environment variables.
+
+After deployment, run the smoke test:
+
+```bash
+python scripts/smoke_deploy.py https://production-rag-demo.onrender.com
+```
+
+Rollback by selecting the previous successful deploy in Render, or by reverting
+the Git commit that triggered the failed deployment and redeploying.
+
 ## Health Check
 
 The API exposes:

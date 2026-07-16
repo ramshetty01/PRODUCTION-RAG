@@ -77,3 +77,36 @@ def test_security_scan_workflow_audits_dependencies_and_container_surface():
     assert "severity: CRITICAL,HIGH" in workflow
     assert "trivy-report.json" in workflow
     assert "actions/upload-artifact@v4" in workflow
+
+
+def test_render_blueprint_defines_public_demo_service():
+    render = (ROOT / "deploy" / "render.yaml").read_text(encoding="utf-8")
+    start = (ROOT / "deploy" / "render-start.sh").read_text(encoding="utf-8")
+
+    assert "type: web" in render
+    assert "name: production-rag-demo" in render
+    assert "startCommand: bash deploy/render-start.sh" in render
+    assert "healthCheckPath: /health" in render
+    assert "mountPath: /var/data/production-rag" in render
+    assert "RAG_BOOTSTRAP_DEMO_INDEX" in render
+    assert "RAG_API_KEYS" in render
+    assert "sync: false" in render
+    assert "uvicorn main:app" in start
+    assert "scripts/ingest.py" in start
+    assert "--manifest \"$RAG_MANIFEST_PATH\"" in start
+
+
+def test_public_deployment_docs_include_smoke_test_and_rollback():
+    docs = (ROOT / "docs" / "DEPLOYMENT.md").read_text(encoding="utf-8")
+    deploy_readme = (ROOT / "deploy" / "README.md").read_text(encoding="utf-8")
+    smoke = (ROOT / "scripts" / "smoke_deploy.py").read_text(encoding="utf-8")
+
+    assert "deploy/render.yaml" in docs
+    assert "https://production-rag-demo.onrender.com" in docs
+    assert "python scripts/smoke_deploy.py" in docs
+    assert "Rollback" in docs
+    assert "/health" in smoke
+    assert "/demo" in smoke
+    assert "/metrics" in smoke
+    assert "/query" in smoke
+    assert "Render Public Demo" in deploy_readme
