@@ -42,6 +42,9 @@ class RuntimeSettings:
     jwt_secret: str = ""
     jwt_issuer: str = ""
     jwt_audience: str = ""
+    otel_enabled: bool = False
+    otel_service_name: str = "production-rag"
+    otel_exporter_otlp_endpoint: str = ""
 
 
 def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
@@ -109,4 +112,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         jwt_secret=_setting_value(dotenv_values, "RAG_JWT_SECRET", ""),
         jwt_issuer=_setting_value(dotenv_values, "RAG_JWT_ISSUER", ""),
         jwt_audience=_setting_value(dotenv_values, "RAG_JWT_AUDIENCE", ""),
+        otel_enabled=_setting_bool(dotenv_values, "RAG_OTEL_ENABLED", False),
+        otel_service_name=_setting_value(dotenv_values, "RAG_OTEL_SERVICE_NAME", "production-rag"),
+        otel_exporter_otlp_endpoint=_setting_value(dotenv_values, "RAG_OTEL_EXPORTER_OTLP_ENDPOINT", ""),
     )

@@ -21,6 +21,9 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_JWT_SECRET",
         "RAG_JWT_ISSUER",
         "RAG_JWT_AUDIENCE",
+        "RAG_OTEL_ENABLED",
+        "RAG_OTEL_SERVICE_NAME",
+        "RAG_OTEL_EXPORTER_OTLP_ENDPOINT",
     ]:
         monkeypatch.delenv(key, raising=False)
 
@@ -42,6 +45,9 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.redis_url == ""
     assert settings.auth_mode == "auto"
     assert settings.jwt_secret == ""
+    assert settings.otel_enabled is False
+    assert settings.otel_service_name == "production-rag"
+    assert settings.otel_exporter_otlp_endpoint == ""
 
 
 def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
@@ -71,6 +77,9 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_JWT_SECRET=secret",
                 "RAG_JWT_ISSUER=issuer",
                 "RAG_JWT_AUDIENCE=rag-api",
+                "RAG_OTEL_ENABLED=true",
+                "RAG_OTEL_SERVICE_NAME=rag-test",
+                "RAG_OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318/v1/traces",
             ]
         ),
         encoding="utf-8",
@@ -99,6 +108,9 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.jwt_secret == "secret"
     assert settings.jwt_issuer == "issuer"
     assert settings.jwt_audience == "rag-api"
+    assert settings.otel_enabled is True
+    assert settings.otel_service_name == "rag-test"
+    assert settings.otel_exporter_otlp_endpoint == "http://collector:4318/v1/traces"
 
 
 def test_env_example_documents_required_runtime_settings():
@@ -120,3 +132,6 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_RATE_LIMIT_BACKEND=" in env_example
     assert "RAG_REDIS_URL=" in env_example
     assert "RAG_JWT_SECRET=" in env_example
+    assert "RAG_OTEL_ENABLED=" in env_example
+    assert "RAG_OTEL_SERVICE_NAME=" in env_example
+    assert "RAG_OTEL_EXPORTER_OTLP_ENDPOINT=" in env_example

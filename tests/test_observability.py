@@ -5,13 +5,16 @@ from langchain_core.documents import Document
 
 from src.rag.observability import (
     MetricsRegistry,
+    OptionalOpenTelemetry,
     TraceEvent,
     chunk_ids,
     citation_ids,
+    configure_opentelemetry,
     new_request_id,
     structured_request_log,
     trace_latency,
 )
+from src.rag.config import RuntimeSettings
 
 
 def test_trace_event_serializes_structured_log_fields():
@@ -77,3 +80,47 @@ def test_structured_request_log_is_machine_parseable():
         "request_id": "req-1",
         "status_code": 200,
     }
+
+
+def test_optional_opentelemetry_span_sets_attributes():
+    class FakeSpan:
+        def __init__(self):
+            self.attributes = {}
+
+        def set_attribute(self, key, value):
+            self.attributes[key] = value
+
+    class FakeSpanContext:
+        def __init__(self, span):
+            self.span = span
+
+        def __enter__(self):
+            return self.span
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    class FakeTracer:
+        def __init__(self):
+            self.started = []
+
+        def start_as_current_span(self, name):
+            span = FakeSpan()
+            self.started.append((name, span))
+            return FakeSpanContext(span)
+
+    tracer = FakeTracer()
+    telemetry = OptionalOpenTelemetry(enabled=True, tracer=tracer, reason="test")
+
+    with telemetry.span("rag.retrieval", {"rag.request_id": "req-1", "rag.top_k": 4, "skip": None}):
+        pass
+
+    assert tracer.started[0][0] == "rag.retrieval"
+    assert tracer.started[0][1].attributes == {"rag.request_id": "req-1", "rag.top_k": 4}
+
+
+def test_opentelemetry_config_is_noop_when_disabled():
+    telemetry = configure_opentelemetry(RuntimeSettings(otel_enabled=False))
+
+    assert telemetry.enabled is False
+    assert telemetry.reason == "disabled"

@@ -6,8 +6,10 @@ import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from typing import Any
 
 from src.rag.citations import citation_id_for_chunk
+from src.rag.config import RuntimeSettings
 
 
 LOGGER = logging.getLogger("rag.api")
@@ -98,6 +100,47 @@ def structured_request_log(method: str, path: str, status_code: int, latency_ms:
         },
         sort_keys=True,
     )
+
+
+class OptionalOpenTelemetry:
+    def __init__(self, enabled: bool = False, tracer: Any | None = None, reason: str = "disabled"):
+        self.enabled = enabled
+        self.tracer = tracer
+        self.reason = reason
+
+    @contextmanager
+    def span(self, name: str, attributes: dict | None = None):
+        if not self.enabled or self.tracer is None:
+            yield None
+            return
+        with self.tracer.start_as_current_span(name) as span:
+            for key, value in (attributes or {}).items():
+                if value is not None:
+                    span.set_attribute(key, value)
+            yield span
+
+
+def configure_opentelemetry(settings: RuntimeSettings) -> OptionalOpenTelemetry:
+    if not settings.otel_enabled:
+        return OptionalOpenTelemetry(reason="disabled")
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    except ImportError:
+        LOGGER.warning("OpenTelemetry is enabled but optional packages are not installed")
+        return OptionalOpenTelemetry(reason="missing-opentelemetry-packages")
+
+    resource = Resource.create({"service.name": settings.otel_service_name})
+    provider = TracerProvider(resource=resource)
+    exporter_kwargs = {}
+    if settings.otel_exporter_otlp_endpoint:
+        exporter_kwargs["endpoint"] = settings.otel_exporter_otlp_endpoint
+    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(**exporter_kwargs)))
+    trace.set_tracer_provider(provider)
+    return OptionalOpenTelemetry(enabled=True, tracer=trace.get_tracer(settings.otel_service_name), reason="enabled")
 
 
 @contextmanager
