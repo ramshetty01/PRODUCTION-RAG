@@ -28,6 +28,9 @@ const evalDataset = document.querySelector("#evalDataset");
 const metricRequests = document.querySelector("#metricRequests");
 const metricLatency = document.querySelector("#metricLatency");
 const metricStatus = document.querySelector("#metricStatus");
+const workspaceId = localStorage.getItem("rag_workspace_id") || crypto.randomUUID();
+
+localStorage.setItem("rag_workspace_id", workspaceId);
 
 const scenarios = {
   vendor: {
@@ -178,6 +181,7 @@ async function askQuestion(event) {
       headers,
       body: JSON.stringify({
         query: queryInput.value.trim(),
+        workspace_id: workspaceId,
         retrieval_mode: retrievalMode.value,
         top_k: Number(topK.value),
       }),
@@ -222,6 +226,7 @@ async function uploadDocument(event) {
 
   const body = new FormData();
   body.append("file", file);
+  body.append("workspace_id", workspaceId);
 
   try {
     const response = await fetch("/upload", {

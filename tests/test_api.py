@@ -85,6 +85,8 @@ def test_demo_frontend_assets_are_served():
     assert "evalFaithfulness" in page.text
     assert "/query" in script.text
     assert "/upload" in script.text
+    assert "rag_workspace_id" in script.text
+    assert "workspace_id" in script.text
     assert "/evaluation" in script.text
     assert "Authorization" in script.text
     assert "X-API-Key" in script.text
@@ -141,6 +143,7 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
 
     response = client.post(
         "/upload",
+        data={"workspace_id": "workspace-a"},
         files={"file": ("policy.md", b"# Policy\n\nVendors require SOC 2 evidence.", "text/markdown")},
     )
 
@@ -149,12 +152,14 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
     assert body["filename"] == "policy.md"
     assert body["document_id"] == "policy"
     assert body["document_version"] == "v1"
+    assert body["workspace_id"] == "workspace-a"
     assert body["status"] == "indexed"
     assert body["chunks_created"] == len(built["chunks"])
     assert body["vector_records"] == len(built["chunks"])
     assert Path(body["saved_path"]).read_text(encoding="utf-8").startswith("# Policy")
     assert built["persist_directory"] == tmp_path / "chroma_db"
     assert built["backend"] == "chroma"
+    assert built["chunks"][0].metadata["workspace_id"] == "workspace-a"
     assert (tmp_path / "data" / "processed" / "ingestion_manifest.json").exists()
 
 
@@ -175,6 +180,50 @@ def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypat
     assert unsupported.json()["detail"] == "supported upload types: PDF, Markdown, or text"
     assert empty.status_code == 400
     assert empty.json()["detail"] == "uploaded file is empty"
+
+
+def test_query_endpoint_isolates_results_by_workspace(monkeypatch):
+    class WorkspaceVectorStore:
+        def similarity_search(self, query, k):
+            return [
+                Document(
+                    page_content="Workspace alpha policy.",
+                    metadata={
+                        "source": "/tmp/alpha.txt",
+                        "page": 0,
+                        "chunk_index": 0,
+                        "chunk_id": "alpha:p0:c0",
+                        "document_id": "alpha",
+                        "document_version": "v1",
+                        "workspace_id": "alpha",
+                        "access_roles": ["public"],
+                    },
+                ),
+                Document(
+                    page_content="Workspace beta policy.",
+                    metadata={
+                        "source": "/tmp/beta.txt",
+                        "page": 0,
+                        "chunk_index": 0,
+                        "chunk_id": "beta:p0:c0",
+                        "document_id": "beta",
+                        "document_version": "v1",
+                        "workspace_id": "beta",
+                        "access_roles": ["public"],
+                    },
+                ),
+            ][:k]
+
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: WorkspaceVectorStore())
+    client = TestClient(routes.create_app())
+
+    alpha = client.post("/query", json={"query": "policy", "workspace_id": "alpha", "top_k": 2}).json()
+    beta = client.post("/query", json={"query": "policy", "workspace_id": "beta", "top_k": 2}).json()
+
+    assert alpha["retrieval"]["chunk_ids"] == ["alpha:p0:c0"]
+    assert beta["retrieval"]["chunk_ids"] == ["beta:p0:c0"]
+    assert beta["cached"] is False
 
 
 def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
