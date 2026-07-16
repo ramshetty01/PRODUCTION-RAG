@@ -1,6 +1,7 @@
 from langchain_core.documents import Document
 
-from src.rag.vector_store import build_chroma_db, count_records, load_chroma_db
+from src.rag.config import RuntimeSettings
+from src.rag.vector_store import build_chroma_db, build_vector_db, count_records, load_chroma_db, load_vector_db
 
 
 class FakeEmbeddings:
@@ -42,3 +43,71 @@ def test_build_chroma_db_persists_one_record_per_chunk(tmp_path):
     assert count_records(vectorstore) == len(chunks)
     assert count_records(reloaded) == len(chunks)
     assert results[0].metadata["chunk_id"] == "docs:p1:c1"
+
+
+def test_vector_backend_defaults_to_chroma(tmp_path):
+    chunks = [
+        Document(
+            page_content="A workflow is an automated process.",
+            metadata={"source": "/tmp/docs.pdf", "page": 0, "chunk_index": 0, "chunk_id": "docs:p0:c0"},
+        )
+    ]
+    embeddings = FakeEmbeddings()
+
+    vectorstore = build_vector_db(
+        chunks,
+        tmp_path / "chroma_db",
+        embedding_function=embeddings,
+        settings=RuntimeSettings(vector_backend="chroma"),
+    )
+    reloaded = load_vector_db(
+        tmp_path / "chroma_db",
+        embedding_function=embeddings,
+        settings=RuntimeSettings(vector_backend="chroma"),
+    )
+
+    assert count_records(vectorstore) == 1
+    assert reloaded.similarity_search("workflow", k=1)[0].metadata["chunk_id"] == "docs:p0:c0"
+
+
+def test_qdrant_backend_uses_managed_adapter(monkeypatch):
+    calls = {}
+
+    class FakeQdrantStore:
+        collection_name = "prod_chunks"
+
+        def __init__(self, **kwargs):
+            calls["load"] = kwargs
+
+        @classmethod
+        def from_documents(cls, **kwargs):
+            calls["build"] = kwargs
+            return cls(collection_name=kwargs["collection_name"])
+
+    monkeypatch.setattr("src.rag.vector_store._require_qdrant", lambda: FakeQdrantStore)
+    settings = RuntimeSettings(
+        vector_backend="qdrant",
+        vector_collection="prod_chunks",
+        qdrant_url="https://qdrant.example",
+        qdrant_api_key="secret",
+    )
+    chunks = [Document(page_content="Vendor SOC 2 evidence.", metadata={"chunk_id": "vendor:p0:c0"})]
+
+    build_vector_db(chunks, settings=settings, embedding_function=FakeEmbeddings())
+    load_vector_db(settings=settings, embedding_function=FakeEmbeddings())
+
+    assert calls["build"]["collection_name"] == "prod_chunks"
+    assert calls["build"]["url"] == "https://qdrant.example"
+    assert calls["build"]["api_key"] == "secret"
+    assert calls["load"]["collection_name"] == "prod_chunks"
+
+
+def test_qdrant_backend_requires_url():
+    settings = RuntimeSettings(vector_backend="qdrant")
+
+    try:
+        build_vector_db([], settings=settings, embedding_function=FakeEmbeddings())
+    except (RuntimeError, ValueError) as exc:
+        assert "Qdrant" in str(exc) or "RAG_QDRANT_URL" in str(exc)
+    else:
+        raise AssertionError("expected qdrant backend to require configuration")

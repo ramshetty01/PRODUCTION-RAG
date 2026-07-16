@@ -95,7 +95,9 @@ Runtime environment variables are loaded by `src.rag.config.load_settings`.
 Local `.env` files are ignored by Git; `.env.example` documents safe placeholder
 values for vector database path, manifest path, embedding model, chunk size,
 chunk overlap, Top K, retrieval mode, and optional LLM/reranker provider
-settings.
+settings. `RAG_VECTOR_BACKEND=chroma` is the local default; set
+`RAG_VECTOR_BACKEND=qdrant`, `RAG_QDRANT_URL`, and `RAG_QDRANT_API_KEY` to use
+a managed Qdrant index.
 
 Supported query retrieval modes are `semantic`, `exact`, `hybrid`, `sparse`,
 and `reranked`. Set the default with `RAG_RETRIEVAL_MODE`, or override it per API

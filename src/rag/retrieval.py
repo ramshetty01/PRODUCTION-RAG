@@ -8,7 +8,8 @@ from src.rag.citations import citation_id_for_chunk
 from src.rag.chunking import DEFAULT_DB_PATH
 from src.rag.hybrid_search import hybrid_search
 from src.rag.reranking import rerank_chunks
-from src.rag.vector_store import load_chroma_db
+from src.rag.config import RuntimeSettings
+from src.rag.vector_store import load_vector_db
 
 
 DEFAULT_TOP_K = 4
@@ -48,10 +49,12 @@ def filter_authorized_chunks(chunks, metadata_filters: dict | None = None, user_
 def load_vectorstore(
     persist_directory: str | Path = DEFAULT_DB_PATH,
     embedding_function=None,
+    settings: RuntimeSettings | None = None,
 ):
-    return load_chroma_db(
-        persist_directory=str(persist_directory),
+    return load_vector_db(
+        persist_directory=persist_directory,
         embedding_function=embedding_function,
+        settings=settings,
     )
 
 

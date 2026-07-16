@@ -20,12 +20,13 @@ def test_ingest_corpus_indexes_markdown_sources(tmp_path, monkeypatch):
     source.write_text("Vendors must provide SOC 2 Type II evidence before onboarding.", encoding="utf-8")
     built = {}
 
-    def fake_build_chroma_db(chunks, persist_directory):
+    def fake_build_vector_db(chunks, persist_directory, settings):
         built["chunks"] = chunks
         built["persist_directory"] = persist_directory
+        built["backend"] = settings.vector_backend
         return object()
 
-    monkeypatch.setattr("scripts.ingest_corpus.build_chroma_db", fake_build_chroma_db)
+    monkeypatch.setattr("scripts.ingest_corpus.build_vector_db", fake_build_vector_db)
     monkeypatch.setattr("scripts.ingest_corpus.count_records", lambda _vectorstore: len(built["chunks"]))
 
     result = ingest_sources(
@@ -40,4 +41,5 @@ def test_ingest_corpus_indexes_markdown_sources(tmp_path, monkeypatch):
     assert result["indexed"][0]["document_id"] == "vendor-risk-policy"
     assert result["indexed"][0]["chunks"] == len(built["chunks"])
     assert built["persist_directory"] == tmp_path / "chroma_db"
+    assert built["backend"] == "chroma"
     assert (tmp_path / "manifest.json").exists()

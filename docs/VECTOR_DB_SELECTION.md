@@ -32,10 +32,33 @@ should change.
 
 ## Current Decision
 
-Use ChromaDB now. It is the best fit while the project emphasizes local
+Use ChromaDB by default. It is the best fit while the project emphasizes local
 development, reproducible ingestion, simple backups, and low operational cost.
-The existing retrieval code already supports metadata filtering and persistent
-storage through Chroma.
+The runtime vector backend is pluggable, and Qdrant is the supported managed
+or remote-production option when deployment needs a service outside the API
+process.
+
+## Runtime Configuration
+
+Local default:
+
+```bash
+RAG_VECTOR_BACKEND=chroma
+RAG_VECTOR_DB_PATH=./chroma_db
+RAG_VECTOR_COLLECTION=rag_chunks
+```
+
+Managed Qdrant:
+
+```bash
+RAG_VECTOR_BACKEND=qdrant
+RAG_VECTOR_COLLECTION=rag_chunks
+RAG_QDRANT_URL=https://example.qdrant.tech
+RAG_QDRANT_API_KEY=replace-me
+```
+
+The Qdrant backend requires the optional `langchain-qdrant` package. Keep
+Chroma for local CI and demos unless you are validating a real remote index.
 
 ## Migration Triggers
 

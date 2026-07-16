@@ -25,7 +25,7 @@ from src.rag.ingestion import (
     record_document_ingestion,
     save_manifest,
 )
-from src.rag.vector_store import build_chroma_db, count_records
+from src.rag.vector_store import build_vector_db, count_records
 
 
 def parse_args():
@@ -77,7 +77,7 @@ def main():
         print(f"Chunk verification: {summary}")
 
     if args.build_vector_db:
-        vectorstore = build_chroma_db(chunks, persist_directory=Path(args.persist_dir))
+        vectorstore = build_vector_db(chunks, persist_directory=Path(args.persist_dir), settings=settings)
         print(f"Saved Chroma database to {args.persist_dir}")
         print(f"Chroma records: {count_records(vectorstore)}")
 

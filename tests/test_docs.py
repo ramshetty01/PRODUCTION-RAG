@@ -112,3 +112,15 @@ def test_drift_metrics_doc_defines_signals_and_thresholds():
     assert "citation_coverage_min" in drift
     assert "configs/settings.toml" in drift
     assert "[Drift Metrics](docs/DRIFT_METRICS.md)" in readme
+
+
+def test_vector_backend_docs_cover_qdrant_configuration():
+    vector_doc = (ROOT / "docs" / "VECTOR_DB_SELECTION.md").read_text(encoding="utf-8")
+    deployment = (ROOT / "docs" / "DEPLOYMENT.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "RAG_VECTOR_BACKEND=qdrant" in vector_doc
+    assert "RAG_QDRANT_URL" in vector_doc
+    assert "langchain-qdrant" in vector_doc
+    assert "RAG_VECTOR_BACKEND" in deployment
+    assert "managed Qdrant index" in readme
