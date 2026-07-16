@@ -20,6 +20,7 @@ from src.rag.observability import (
     TraceEvent,
     chunk_ids,
     citation_ids,
+    configure_opentelemetry,
     new_request_id,
     structured_request_log,
     trace_latency,
@@ -133,6 +134,7 @@ router = APIRouter()
 QUERY_CACHE = build_query_cache(SETTINGS.cache_backend, SETTINGS.redis_url)
 RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_url, max_requests=120, window_seconds=60)
 METRICS = MetricsRegistry()
+OTEL = configure_opentelemetry(SETTINGS)
 
 
 def _auth_context(
@@ -352,8 +354,18 @@ def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_conte
         "_retrieval_mode": requested_mode,
         "_auth_scope": auth_context.cache_scope(),
     }
-    cached_payload = QUERY_CACHE.get(safe_query, request.top_k, cache_filters)
+    with OTEL.span(
+        "rag.cache",
+        {
+            "rag.request_id": request_id,
+            "rag.retrieval_mode": requested_mode,
+            "rag.top_k": request.top_k,
+        },
+    ):
+        cached_payload = QUERY_CACHE.get(safe_query, request.top_k, cache_filters)
     if cached_payload:
+        with OTEL.span("rag.cache.hit", {"rag.request_id": request_id, "rag.cache_hit": True}):
+            pass
         cached_payload = {**cached_payload, "request_id": request_id, "cached": True}
         cached_payload["trace"] = {**cached_payload["trace"], "request_id": request_id}
         return QueryResponse(**cached_payload)
@@ -361,16 +373,41 @@ def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_conte
     try:
         with trace_latency(event):
             vectorstore = load_vectorstore(_safe_api_path(request.persist_dir), settings=SETTINGS)
-            retrieval_mode, chunks = _retrieve_for_request(
-                safe_query,
-                request,
-                vectorstore,
-                auth_context,
-            )
-            response = generate_answer(safe_query, chunks)
-            event.retrieved_chunk_ids = chunk_ids(chunks)
-            event.answer = response["answer"]
-            event.citations = citation_ids(response["citations"])
+            with OTEL.span(
+                "rag.retrieval",
+                {
+                    "rag.request_id": request_id,
+                    "rag.retrieval_mode": requested_mode,
+                    "rag.top_k": request.top_k,
+                },
+            ):
+                retrieval_mode, chunks = _retrieve_for_request(
+                    safe_query,
+                    request,
+                    vectorstore,
+                    auth_context,
+                )
+            if retrieval_mode == "reranked":
+                with OTEL.span("rag.reranking", {"rag.request_id": request_id, "rag.returned_chunks": len(chunks)}):
+                    pass
+            with OTEL.span(
+                "rag.generation",
+                {
+                    "rag.request_id": request_id,
+                    "rag.retrieved_chunks": len(chunks),
+                },
+            ):
+                response = generate_answer(safe_query, chunks)
+            with OTEL.span(
+                "rag.citation_enforcement",
+                {
+                    "rag.request_id": request_id,
+                    "rag.citation_count": len(response["citations"]),
+                },
+            ):
+                event.retrieved_chunk_ids = chunk_ids(chunks)
+                event.answer = response["answer"]
+                event.citations = citation_ids(response["citations"])
             event.token_usage = response.get("token_usage", {})
             event.token_usage["estimated_cost"] = estimate_llm_cost(event.token_usage)
         payload = {
@@ -435,7 +472,15 @@ def create_app() -> FastAPI:
         start = time.perf_counter()
         status_code = 500
         try:
-            response = await call_next(request)
+            with OTEL.span(
+                "http.request",
+                {
+                    "http.method": request.method,
+                    "http.route": request.url.path,
+                    "rag.request_id": request_id,
+                },
+            ):
+                response = await call_next(request)
             status_code = response.status_code
             return response
         finally:

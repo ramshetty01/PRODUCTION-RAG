@@ -99,6 +99,10 @@ settings. `RAG_VECTOR_BACKEND=chroma` is the local default; set
 `RAG_VECTOR_BACKEND=qdrant`, `RAG_QDRANT_URL`, and `RAG_QDRANT_API_KEY` to use
 a managed Qdrant index.
 
+OpenTelemetry tracing is disabled by default for local development. Set
+`RAG_OTEL_ENABLED=true` and `RAG_OTEL_EXPORTER_OTLP_ENDPOINT` when deploying
+behind an OTLP collector.
+
 Supported query retrieval modes are `semantic`, `exact`, `hybrid`, `sparse`,
 and `reranked`. Set the default with `RAG_RETRIEVAL_MODE`, or override it per API
 request:

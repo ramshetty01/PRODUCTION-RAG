@@ -38,6 +38,24 @@ class FakeVectorStore:
         ][:k]
 
 
+class RecordingTelemetry:
+    def __init__(self):
+        self.spans = []
+
+    def span(self, name, attributes=None):
+        telemetry = self
+
+        class SpanContext:
+            def __enter__(self):
+                telemetry.spans.append((name, attributes or {}))
+                return None
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+        return SpanContext()
+
+
 def test_health_endpoint_returns_status():
     client = TestClient(routes.create_app())
 
@@ -178,6 +196,27 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["trace"]["latency_ms"] >= 0
     assert body["trace"]["token_usage"]["answer_tokens"] > 0
     assert body["cached"] is False
+
+
+def test_query_endpoint_records_opentelemetry_stage_spans(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    telemetry = RecordingTelemetry()
+    monkeypatch.setattr(routes, "OTEL", telemetry)
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    response = client.post("/query", json={"query": "What does a runner do?", "top_k": 2})
+
+    assert response.status_code == 200
+    span_names = [name for name, _attributes in telemetry.spans]
+    assert "http.request" in span_names
+    assert "rag.cache" in span_names
+    assert "rag.retrieval" in span_names
+    assert "rag.generation" in span_names
+    assert "rag.citation_enforcement" in span_names
+    retrieval = next(attributes for name, attributes in telemetry.spans if name == "rag.retrieval")
+    assert retrieval["rag.top_k"] == 2
+    assert retrieval["rag.retrieval_mode"] == "semantic"
 
 
 def test_query_endpoint_rejects_prompt_injection():

@@ -112,6 +112,30 @@ latency in milliseconds. Pass `X-Request-ID` from upstream gateways to preserve
 trace continuity; otherwise the API generates a new request ID and returns it in
 the response header.
 
+## Distributed Tracing
+
+OpenTelemetry tracing is optional for local development and disabled by
+default. Enable it in production when an OTLP collector or managed tracing
+backend is available:
+
+```bash
+RAG_OTEL_ENABLED=true
+RAG_OTEL_SERVICE_NAME=production-rag
+RAG_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
+```
+
+Install the optional OpenTelemetry packages in the runtime image when tracing is
+enabled:
+
+```bash
+python -m pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
+```
+
+The API records spans for `http.request`, `rag.cache`, `rag.cache.hit`,
+`rag.retrieval`, `rag.reranking`, `rag.generation`, and
+`rag.citation_enforcement`. Spans include the request ID and key RAG attributes
+such as retrieval mode, Top K, retrieved chunk count, and citation count.
+
 ## Runtime Configuration
 
 Environment variables are documented in `.env.example`:
@@ -134,6 +158,8 @@ Environment variables are documented in `.env.example`:
 - `RAG_AUTH_MODE`: `dev`, `api_key`, or `jwt`.
 - `RAG_JWT_SECRET`, `RAG_JWT_ISSUER`, `RAG_JWT_AUDIENCE`: JWT validation
   settings for signed bearer-token deployments.
+- `RAG_OTEL_ENABLED`, `RAG_OTEL_SERVICE_NAME`, and
+  `RAG_OTEL_EXPORTER_OTLP_ENDPOINT`: optional OpenTelemetry tracing controls.
 - Query cache entries are scoped by authenticated subject, tenant, and derived
   roles so restricted answers are not shared across authorization contexts.
 - API request paths are resolved under the project root and traversal outside

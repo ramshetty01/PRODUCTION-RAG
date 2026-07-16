@@ -124,3 +124,13 @@ def test_vector_backend_docs_cover_qdrant_configuration():
     assert "langchain-qdrant" in vector_doc
     assert "RAG_VECTOR_BACKEND" in deployment
     assert "managed Qdrant index" in readme
+
+
+def test_deployment_docs_cover_opentelemetry_tracing():
+    deployment = (ROOT / "docs" / "DEPLOYMENT.md").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "RAG_OTEL_ENABLED=true" in deployment
+    assert "RAG_OTEL_EXPORTER_OTLP_ENDPOINT" in deployment
+    assert "rag.citation_enforcement" in deployment
+    assert "OpenTelemetry tracing is disabled by default" in readme
