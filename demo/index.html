@@ -62,6 +62,15 @@
               </button>
             </div>
           </form>
+
+          <form id="uploadForm" class="upload-form">
+            <label class="upload-drop" for="documentUpload">
+              <span>Upload corpus</span>
+              <input id="documentUpload" name="file" type="file" accept=".pdf,.md,.markdown,.txt">
+            </label>
+            <button id="uploadButton" type="submit">Index</button>
+            <span id="uploadStatus" class="upload-status">No upload</span>
+          </form>
         </section>
 
         <section class="workspace" aria-label="answer workspace">

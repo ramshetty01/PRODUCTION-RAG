@@ -4,6 +4,7 @@ from src.rag.chunking import (
     DEFAULT_CHUNK_OVERLAP_TOKENS,
     DEFAULT_CHUNK_TOKENS,
     chunk_documents,
+    chunk_text_file,
     chunk_token_summary,
     count_tokens,
 )
@@ -53,3 +54,17 @@ def test_chunk_token_summary_reports_verification_counts():
     assert summary["max_tokens"] <= DEFAULT_CHUNK_TOKENS
     assert summary["target_tokens"] == DEFAULT_CHUNK_TOKENS
     assert summary["overlap_tokens"] == DEFAULT_CHUNK_OVERLAP_TOKENS
+
+
+def test_chunk_text_file_ingests_markdown_with_document_metadata(tmp_path):
+    source = tmp_path / "security-policy.md"
+    source.write_text("# Security Policy\n\nAll vendors require SOC 2 evidence.", encoding="utf-8")
+
+    chunks = chunk_text_file(source, chunk_size=12, chunk_overlap=2, document_version="v3")
+
+    assert chunks
+    assert chunks[0].metadata["source"] == str(source.resolve())
+    assert chunks[0].metadata["page"] == 0
+    assert chunks[0].metadata["document_id"] == "security-policy"
+    assert chunks[0].metadata["document_version"] == "v3"
+    assert chunks[0].metadata["access_roles"] == ["public"]

@@ -3,12 +3,12 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
-from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_token_summary, count_tokens
+from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_text_file, chunk_token_summary, count_tokens
 from src.rag.config import load_settings
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
@@ -35,6 +35,7 @@ SUPPORTED_RETRIEVAL_MODES = {"semantic", "exact", "hybrid", "sparse", "reranked"
 AUTH_CONTEXTS = parse_api_keys(SETTINGS.api_keys)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEMO_DIR = PROJECT_ROOT / "demo"
+SUPPORTED_UPLOAD_SUFFIXES = {".pdf", ".md", ".markdown", ".txt"}
 
 
 class HealthResponse(BaseModel):
@@ -107,6 +108,17 @@ class MonitoringResponse(BaseModel):
     metrics: dict
 
 
+class UploadIngestResponse(BaseModel):
+    filename: str
+    saved_path: str
+    document_id: str
+    document_version: str
+    status: str
+    chunks_created: int
+    vector_records: int | None
+    chunk_summary: dict | None = None
+
+
 router = APIRouter()
 QUERY_CACHE = build_query_cache(SETTINGS.cache_backend, SETTINGS.redis_url)
 RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_url, max_requests=120, window_seconds=60)
@@ -140,6 +152,27 @@ def _safe_api_path(path: str | Path) -> Path:
 
 def _candidate_documents(vectorstore, query: str, top_k: int):
     return vectorstore.similarity_search(query, k=max(top_k * 4, top_k))
+
+
+def _clear_query_cache() -> None:
+    if hasattr(QUERY_CACHE, "values"):
+        QUERY_CACHE.values.clear()
+
+
+def _chunks_for_path(path: Path, document_version: str):
+    if path.suffix.lower() == ".pdf":
+        return chunk_pdf(
+            path,
+            chunk_size=SETTINGS.chunk_size,
+            chunk_overlap=SETTINGS.chunk_overlap,
+            document_version=document_version,
+        )
+    return chunk_text_file(
+        path,
+        chunk_size=SETTINGS.chunk_size,
+        chunk_overlap=SETTINGS.chunk_overlap,
+        document_version=document_version,
+    )
 
 
 def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_context: AuthContext):
@@ -238,6 +271,49 @@ def ingest(request: IngestRequest):
             chunks_created=len(chunks),
             min_tokens=min(token_counts) if token_counts else None,
             max_tokens=max(token_counts) if token_counts else None,
+            vector_records=vector_records,
+            chunk_summary=chunk_token_summary(chunks),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/upload", response_model=UploadIngestResponse)
+async def upload_document(file: UploadFile = File(...)):
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
+        raise HTTPException(status_code=400, detail="supported upload types: PDF, Markdown, or text")
+
+    safe_name = Path(file.filename or f"upload{suffix}").name
+    upload_dir = _safe_api_path(PROJECT_ROOT / "data" / "uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_path = upload_dir / safe_name
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="uploaded file is empty")
+    saved_path.write_bytes(content)
+
+    try:
+        manifest_path = _safe_api_path(SETTINGS.manifest_path)
+        persist_dir = _safe_api_path(SETTINGS.vector_db_path)
+        manifest = load_manifest(manifest_path)
+        decision = plan_document_ingestion(saved_path, manifest)
+        chunks = _chunks_for_path(saved_path, decision.document_version)
+        vectorstore = build_chroma_db(chunks, persist_directory=persist_dir)
+        vector_records = count_records(vectorstore)
+        record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
+        save_manifest(manifest, manifest_path)
+        _clear_query_cache()
+        return UploadIngestResponse(
+            filename=safe_name,
+            saved_path=str(saved_path),
+            document_id=decision.document_id,
+            document_version=decision.document_version,
+            status="indexed",
+            chunks_created=len(chunks),
             vector_records=vector_records,
             chunk_summary=chunk_token_summary(chunks),
         )

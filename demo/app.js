@@ -1,9 +1,13 @@
 const form = document.querySelector("#queryForm");
+const uploadForm = document.querySelector("#uploadForm");
 const queryInput = document.querySelector("#queryInput");
 const retrievalMode = document.querySelector("#retrievalMode");
 const topK = document.querySelector("#topK");
 const apiKey = document.querySelector("#apiKey");
 const askButton = document.querySelector("#askButton");
+const uploadInput = document.querySelector("#documentUpload");
+const uploadButton = document.querySelector("#uploadButton");
+const uploadStatus = document.querySelector("#uploadStatus");
 const apiStatus = document.querySelector("#apiStatus");
 const answerText = document.querySelector("#answerText");
 const requestId = document.querySelector("#requestId");
@@ -161,6 +165,45 @@ async function askQuestion(event) {
   }
 }
 
+async function uploadDocument(event) {
+  event.preventDefault();
+  const file = uploadInput.files?.[0];
+  if (!file) {
+    uploadStatus.textContent = "Choose a file";
+    return;
+  }
+
+  uploadButton.disabled = true;
+  uploadButton.textContent = "Indexing";
+  uploadStatus.textContent = file.name;
+  setStatus("Indexing");
+
+  const body = new FormData();
+  body.append("file", file);
+
+  try {
+    const response = await fetch("/upload", {
+      method: "POST",
+      body,
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || `HTTP ${response.status}`);
+    }
+    uploadStatus.textContent = `${payload.chunks_created} chunks indexed`;
+    metricStatus.textContent = "Indexed";
+    setStatus("Online");
+  } catch (error) {
+    uploadStatus.textContent = error.message;
+    metricStatus.textContent = "Upload error";
+    setStatus("Error", "error");
+  } finally {
+    uploadButton.disabled = false;
+    uploadButton.textContent = "Index";
+    refreshMetrics();
+  }
+}
+
 document.querySelectorAll("[data-scenario]").forEach((button) => {
   button.addEventListener("click", () => {
     const scenario = scenarios[button.dataset.scenario];
@@ -171,5 +214,6 @@ document.querySelectorAll("[data-scenario]").forEach((button) => {
 });
 
 form.addEventListener("submit", askQuestion);
+uploadForm.addEventListener("submit", uploadDocument);
 checkHealth();
 refreshMetrics();

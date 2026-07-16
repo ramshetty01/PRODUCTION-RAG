@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 
@@ -57,14 +59,79 @@ def test_demo_frontend_assets_are_served():
     assert page.status_code == 200
     assert "Production RAG Demo Console" in page.text
     assert "Chat with your data" in page.text
+    assert "documentUpload" in page.text
     assert "/query" in script.text
+    assert "/upload" in script.text
     assert ".workspace" in styles.text
+    assert ".upload-form" in styles.text
     assert "/demo/fonts/KMR_Apparat_Light.woff2" in styles.text
     assert "https://spur.us" not in styles.text
     assert styles.headers["content-type"].startswith("text/css")
     assert script.headers["content-type"].startswith("application/javascript")
     assert font.status_code == 200
     assert font.headers["content-type"].startswith("font/woff2")
+
+
+def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            manifest_path=str(tmp_path / "data" / "processed" / "ingestion_manifest.json"),
+            vector_db_path=str(tmp_path / "chroma_db"),
+            chunk_size=12,
+            chunk_overlap=2,
+        ),
+    )
+
+    built = {}
+
+    def fake_build_chroma_db(chunks, persist_directory):
+        built["chunks"] = chunks
+        built["persist_directory"] = persist_directory
+        return object()
+
+    monkeypatch.setattr(routes, "build_chroma_db", fake_build_chroma_db)
+    monkeypatch.setattr(routes, "count_records", lambda _vectorstore: len(built["chunks"]))
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        files={"file": ("policy.md", b"# Policy\n\nVendors require SOC 2 evidence.", "text/markdown")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["filename"] == "policy.md"
+    assert body["document_id"] == "policy"
+    assert body["document_version"] == "v1"
+    assert body["status"] == "indexed"
+    assert body["chunks_created"] == len(built["chunks"])
+    assert body["vector_records"] == len(built["chunks"])
+    assert Path(body["saved_path"]).read_text(encoding="utf-8").startswith("# Policy")
+    assert built["persist_directory"] == tmp_path / "chroma_db"
+    assert (tmp_path / "data" / "processed" / "ingestion_manifest.json").exists()
+
+
+def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    client = TestClient(routes.create_app())
+
+    unsupported = client.post(
+        "/upload",
+        files={"file": ("spreadsheet.csv", b"question,answer", "text/csv")},
+    )
+    empty = client.post(
+        "/upload",
+        files={"file": ("empty.md", b"", "text/markdown")},
+    )
+
+    assert unsupported.status_code == 400
+    assert unsupported.json()["detail"] == "supported upload types: PDF, Markdown, or text"
+    assert empty.status_code == 400
+    assert empty.json()["detail"] == "uploaded file is empty"
 
 
 def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
