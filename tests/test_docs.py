@@ -10,6 +10,7 @@ def test_readme_quickstart_documents_fresh_clone_flow():
     assert "python3 -m venv .venv" in readme
     assert "python -m pip install -r requirements.txt" in readme
     assert "python scripts/ingest.py --pdf docs.pdf --build-vector-db" in readme
+    assert "python scripts/ingest_corpus.py" in readme
     assert "python -m uvicorn main:app --reload" in readme
     assert "chroma_db/" in readme
     assert "[PRD](docs/PRD.md)" in readme
@@ -43,7 +44,9 @@ def test_readme_contains_portfolio_demo_walkthrough():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "Portfolio Demo" in readme
-    assert "python scripts/query.py \"What is a GitHub Actions runner?\"" in readme
+    assert "enterprise" in readme
+    assert "vendor-risk corpus" in readme
+    assert "python scripts/query.py \"What evidence is required before vendor onboarding?\"" in readme
     assert '"retrieval_mode":"hybrid"' in readme
     assert "The answer is not available in the retrieved context." in readme
     assert "faithfulness passed: 1.00 >= 0.90" in readme

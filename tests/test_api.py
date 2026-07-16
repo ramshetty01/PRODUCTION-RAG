@@ -59,6 +59,7 @@ def test_demo_frontend_assets_are_served():
     assert page.status_code == 200
     assert "Production RAG Demo Console" in page.text
     assert "Chat with your data" in page.text
+    assert "What evidence is required before vendor onboarding?" in page.text
     assert "documentUpload" in page.text
     assert "/query" in script.text
     assert "/upload" in script.text

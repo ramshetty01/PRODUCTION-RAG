@@ -42,8 +42,8 @@ starting the Deployment.
 Use `deploy/render.yaml` to publish the API and browser demo as a Render web
 service. The blueprint installs Python dependencies, starts the API through
 `deploy/render-start.sh`, mounts persistent storage at
-`/var/data/production-rag`, and optionally bootstraps the sample `docs.pdf`
-index on first startup.
+`/var/data/production-rag`, and optionally bootstraps the enterprise demo
+corpus on first startup.
 
 Expected public URL shape:
 
@@ -59,7 +59,7 @@ curl https://production-rag-demo.onrender.com/demo
 curl https://production-rag-demo.onrender.com/metrics
 curl -X POST https://production-rag-demo.onrender.com/query \
   -H "Content-Type: application/json" \
-  -d '{"query":"What is a GitHub Actions runner?","retrieval_mode":"semantic","top_k":4}'
+  -d '{"query":"What evidence is required before vendor onboarding?","retrieval_mode":"hybrid","top_k":4}'
 ```
 
 Secrets must be configured in the hosting provider, not committed to git.

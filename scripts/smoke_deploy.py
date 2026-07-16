@@ -45,7 +45,11 @@ def smoke(base_url: str) -> list[str]:
     status, _, body = _request(
         f"{base_url}/query",
         method="POST",
-        payload={"query": "What is a GitHub Actions runner?", "retrieval_mode": "semantic", "top_k": 4},
+        payload={
+            "query": "What evidence is required before vendor onboarding?",
+            "retrieval_mode": "hybrid",
+            "top_k": 4,
+        },
         timeout=90,
     )
     payload = json.loads(body)
