@@ -301,6 +301,51 @@ h1 {
   gap: 12px;
 }
 
+.auth-strip {
+  display: grid;
+  grid-template-columns: minmax(126px, 0.4fr) minmax(180px, 1fr) 156px minmax(168px, 0.5fr);
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.auth-strip label {
+  display: grid;
+  gap: 7px;
+}
+
+.auth-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.auth-presets button,
+.auth-badge {
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.82);
+  font: normal normal 400 0.75rem/1.5 var(--font-mono);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.auth-presets button:hover {
+  border-color: rgba(131, 244, 190, 0.58);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.auth-badge {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 12px;
+}
+
 .query-box {
   display: grid;
   gap: 8px;
@@ -352,7 +397,7 @@ select:focus {
 
 .query-actions {
   display: grid;
-  grid-template-columns: minmax(135px, 0.75fr) 92px minmax(150px, 0.9fr) 112px;
+  grid-template-columns: minmax(135px, 0.75fr) 92px 112px;
   gap: 10px;
   align-items: end;
 }
@@ -635,6 +680,7 @@ h3 {
 
   .scenario-row,
   .query-actions,
+  .auth-strip,
   .upload-form,
   .ops-bar {
     grid-template-columns: 1fr;

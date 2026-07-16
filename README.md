@@ -199,6 +199,12 @@ golden dataset size. For HR or hiring-manager demos, interpret a passing status
 as evidence that the current prompts, retrieval settings, and corpus still meet
 the committed quality threshold.
 
+To demonstrate protected retrieval, start the API with demo keys such as
+`RAG_API_KEYS=public-key:public,admin-key:public|admin`. In `/demo`, choose the
+Public or Admin preset and ask for protected payroll content. Public retrieval
+returns no admin-only chunks, while Admin retrieval can return chunks tagged
+with the `admin` role.
+
 For a hiring review, start with [Architecture](docs/ARCHITECTURE.md), then scan
 [Testing Strategy](docs/TESTING.md), [Golden Evaluation Dataset](evals/README.md),
 [Reranking](docs/RERANKING.md), [Online Evaluation](docs/ONLINE_EVALUATION.md),
