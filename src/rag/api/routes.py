@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, File, Header, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -68,6 +68,7 @@ class QueryRequest(BaseModel):
     top_k: int = Field(default=SETTINGS.top_k, gt=0)
     retrieval_mode: str = Field(default=SETTINGS.retrieval_mode)
     persist_dir: str = Field(default=SETTINGS.vector_db_path)
+    workspace_id: str | None = None
     metadata_filters: dict | None = None
     user_roles: list[str] = Field(default_factory=lambda: ["public"], deprecated=True)
 
@@ -124,6 +125,7 @@ class UploadIngestResponse(BaseModel):
     saved_path: str
     document_id: str
     document_version: str
+    workspace_id: str = "default"
     status: str
     chunks_created: int
     vector_records: int | None
@@ -187,6 +189,28 @@ def _chunks_for_path(path: Path, document_version: str):
     )
 
 
+def _safe_workspace_id(workspace_id: str | None) -> str | None:
+    if workspace_id is None or workspace_id.strip() == "":
+        return None
+    value = workspace_id.strip()
+    if len(value) > 80:
+        raise HTTPException(status_code=400, detail="workspace_id is too long")
+    if any(not (character.isalnum() or character in {"-", "_"}) for character in value):
+        raise HTTPException(
+            status_code=400,
+            detail="workspace_id may only contain letters, numbers, hyphen, and underscore",
+        )
+    return value
+
+
+def _effective_metadata_filters(request: QueryRequest) -> dict:
+    metadata_filters = dict(request.metadata_filters or {})
+    workspace_id = _safe_workspace_id(request.workspace_id)
+    if workspace_id:
+        metadata_filters["workspace_id"] = workspace_id
+    return metadata_filters
+
+
 def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_context: AuthContext):
     mode = request.retrieval_mode.lower()
     if mode not in SUPPORTED_RETRIEVAL_MODES:
@@ -208,7 +232,7 @@ def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_c
         documents=documents,
         top_k=request.top_k,
         reranker=reranker,
-        metadata_filters=request.metadata_filters,
+        metadata_filters=_effective_metadata_filters(request),
         user_roles=auth_context.roles,
     )
 
@@ -293,7 +317,8 @@ def ingest(request: IngestRequest):
 
 
 @router.post("/upload", response_model=UploadIngestResponse)
-async def upload_document(file: UploadFile = File(...)):
+async def upload_document(file: UploadFile = File(...), workspace_id: str | None = Form(default=None)):
+    safe_workspace_id = _safe_workspace_id(workspace_id)
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
         raise HTTPException(status_code=400, detail="supported upload types: PDF, Markdown, or text")
@@ -314,9 +339,14 @@ async def upload_document(file: UploadFile = File(...)):
         manifest = load_manifest(manifest_path)
         decision = plan_document_ingestion(saved_path, manifest)
         chunks = _chunks_for_path(saved_path, decision.document_version)
+        if safe_workspace_id:
+            for chunk in chunks:
+                chunk.metadata["workspace_id"] = safe_workspace_id
         vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
         vector_records = count_records(vectorstore)
         record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
+        if safe_workspace_id:
+            manifest["documents"][decision.document_id]["workspace_id"] = safe_workspace_id
         save_manifest(manifest, manifest_path)
         _clear_query_cache()
         return UploadIngestResponse(
@@ -324,6 +354,7 @@ async def upload_document(file: UploadFile = File(...)):
             saved_path=str(saved_path),
             document_id=decision.document_id,
             document_version=decision.document_version,
+            workspace_id=safe_workspace_id or "default",
             status="indexed",
             chunks_created=len(chunks),
             vector_records=vector_records,
@@ -350,7 +381,7 @@ def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_conte
 
     event = TraceEvent(request_id=request_id, query=safe_query)
     cache_filters = {
-        **(request.metadata_filters or {}),
+        **_effective_metadata_filters(request),
         "_retrieval_mode": requested_mode,
         "_auth_scope": auth_context.cache_scope(),
     }
