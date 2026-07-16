@@ -123,6 +123,35 @@ def chunk_pdf(
     )
 
 
+def load_text_document(file_path):
+    file_path = Path(file_path).expanduser().resolve()
+    return [
+        Document(
+            page_content=file_path.read_text(encoding="utf-8"),
+            metadata={
+                "source": str(file_path),
+                "page": 0,
+                "document_id": file_path.stem,
+            },
+        )
+    ]
+
+
+def chunk_text_file(
+    file_path,
+    chunk_size=DEFAULT_CHUNK_TOKENS,
+    chunk_overlap=DEFAULT_CHUNK_OVERLAP_TOKENS,
+    document_version: str = "v1",
+):
+    docs = load_text_document(file_path)
+    return chunk_documents(
+        docs,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        document_version=document_version,
+    )
+
+
 if __name__ == "__main__":
     chunks = chunk_pdf()
     print(f"Created {len(chunks)} chunks from {DEFAULT_PDF_PATH.name}")
