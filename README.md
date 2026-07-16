@@ -32,6 +32,12 @@ Run tests:
 python -m pytest
 ```
 
+Run a local reliability smoke load test after starting the API:
+
+```bash
+python scripts/load_test.py http://localhost:8000 --requests-per-endpoint 25 --concurrency 8
+```
+
 Ingest the sample PDF and rebuild the generated vector database:
 
 ```bash
