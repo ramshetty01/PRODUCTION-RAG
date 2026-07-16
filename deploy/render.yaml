@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: production-rag-demo
+    runtime: python
+    plan: starter
+    buildCommand: |
+      python -m pip install --upgrade pip
+      python -m pip install -r requirements.txt
+    startCommand: bash deploy/render-start.sh
+    healthCheckPath: /health
+    disk:
+      name: production-rag-data
+      mountPath: /var/data/production-rag
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.15
+      - key: RAG_HOST
+        value: 0.0.0.0
+      - key: RAG_PORT
+        value: 10000
+      - key: RAG_VECTOR_DB_PATH
+        value: /var/data/production-rag/chroma_db
+      - key: RAG_MANIFEST_PATH
+        value: /var/data/production-rag/ingestion_manifest.json
+      - key: RAG_RETRIEVAL_MODE
+        value: semantic
+      - key: RAG_LLM_PROVIDER
+        value: extractive
+      - key: RAG_BOOTSTRAP_DEMO_INDEX
+        value: "true"
+      - key: RAG_AUTH_MODE
+        value: auto
+      - key: RAG_API_KEYS
+        sync: false
+      - key: RAG_LLM_API_KEY
+        sync: false
+      - key: RAG_JWT_SECRET
+        sync: false

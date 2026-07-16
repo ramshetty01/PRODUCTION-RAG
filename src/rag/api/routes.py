@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
@@ -33,6 +34,7 @@ SETTINGS = load_settings()
 SUPPORTED_RETRIEVAL_MODES = {"semantic", "exact", "hybrid", "sparse", "reranked"}
 AUTH_CONTEXTS = parse_api_keys(SETTINGS.api_keys)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DEMO_DIR = PROJECT_ROOT / "demo"
 
 
 class HealthResponse(BaseModel):
@@ -169,6 +171,29 @@ def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_c
 @router.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(status="ok")
+
+
+@router.get("/demo", include_in_schema=False)
+def demo():
+    return FileResponse(DEMO_DIR / "index.html")
+
+
+@router.get("/demo/styles.css", include_in_schema=False)
+def demo_styles():
+    return FileResponse(DEMO_DIR / "styles.css", media_type="text/css")
+
+
+@router.get("/demo/app.js", include_in_schema=False)
+def demo_app():
+    return FileResponse(DEMO_DIR / "app.js", media_type="application/javascript")
+
+
+@router.get("/demo/fonts/{font_name}", include_in_schema=False)
+def demo_font(font_name: str):
+    font_path = DEMO_DIR / "fonts" / font_name
+    if font_path.suffix == ".woff2":
+        return FileResponse(font_path, media_type="font/woff2")
+    return FileResponse(font_path, media_type="font/ttf")
 
 
 @router.post("/ingest", response_model=IngestResponse)

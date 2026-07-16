@@ -46,6 +46,27 @@ def test_health_endpoint_returns_status():
     assert response.headers["X-Request-ID"]
 
 
+def test_demo_frontend_assets_are_served():
+    client = TestClient(routes.create_app())
+
+    page = client.get("/demo")
+    styles = client.get("/demo/styles.css")
+    script = client.get("/demo/app.js")
+    font = client.get("/demo/fonts/KMR_Apparat_Light.woff2")
+
+    assert page.status_code == 200
+    assert "Production RAG Demo Console" in page.text
+    assert "Chat with your data" in page.text
+    assert "/query" in script.text
+    assert ".workspace" in styles.text
+    assert "/demo/fonts/KMR_Apparat_Light.woff2" in styles.text
+    assert "https://spur.us" not in styles.text
+    assert styles.headers["content-type"].startswith("text/css")
+    assert script.headers["content-type"].startswith("application/javascript")
+    assert font.status_code == 200
+    assert font.headers["content-type"].startswith("font/woff2")
+
+
 def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     routes.QUERY_CACHE.values.clear()
     monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
