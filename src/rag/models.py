@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.rag.config import RuntimeSettings, load_settings
-from src.rag.llm.client import ExtractiveLLMClient, LLMClient
+from src.rag.llm.client import ExtractiveLLMClient, LLMClient, OpenAILLMClient, OpenRouterLLMClient
 
 
 @dataclass(frozen=True)
@@ -32,9 +32,27 @@ class ExtractiveModelProvider(LocalModelProvider):
     pass
 
 
+class OpenRouterModelProvider(LocalModelProvider):
+    def llm(self) -> LLMClient:
+        return OpenRouterLLMClient(
+            api_key=self.settings.llm_api_key,
+            model=self.settings.llm_model,
+        )
+
+
+class OpenAIModelProvider(LocalModelProvider):
+    def llm(self) -> LLMClient:
+        return OpenAILLMClient(
+            api_key=self.settings.llm_api_key,
+            model=self.settings.llm_model,
+        )
+
+
 PROVIDERS = {
     "local": LocalModelProvider,
     "extractive": ExtractiveModelProvider,
+    "openai": OpenAIModelProvider,
+    "openrouter": OpenRouterModelProvider,
 }
 
 

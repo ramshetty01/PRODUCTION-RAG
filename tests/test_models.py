@@ -1,7 +1,7 @@
 import pytest
 
 from src.rag.config import RuntimeSettings
-from src.rag.llm.client import ExtractiveLLMClient
+from src.rag.llm.client import ExtractiveLLMClient, OpenAILLMClient, OpenRouterLLMClient
 from src.rag.models import get_model_provider
 
 
@@ -27,6 +27,41 @@ def test_model_provider_uses_configured_embedding_model(monkeypatch):
     embeddings = get_model_provider(settings).embeddings()
 
     assert embeddings.model_name == "custom-embedding-model"
+
+
+def test_model_provider_returns_openrouter_llm_client():
+    settings = RuntimeSettings(
+        llm_provider="openrouter",
+        llm_model="provider/model",
+        llm_api_key="test-key",
+    )
+
+    llm = get_model_provider(settings).llm()
+
+    assert isinstance(llm, OpenRouterLLMClient)
+    assert llm.model == "provider/model"
+    assert "test-key" not in repr(llm)
+
+
+def test_model_provider_returns_openai_compatible_llm_client():
+    settings = RuntimeSettings(
+        llm_provider="openai",
+        llm_model="gpt-test",
+        llm_api_key="test-key",
+    )
+
+    llm = get_model_provider(settings).llm()
+
+    assert isinstance(llm, OpenAILLMClient)
+    assert llm.model == "gpt-test"
+
+
+def test_openrouter_provider_requires_key_and_model():
+    with pytest.raises(ValueError, match="RAG_LLM_API_KEY"):
+        get_model_provider(RuntimeSettings(llm_provider="openrouter", llm_model="provider/model")).llm()
+
+    with pytest.raises(ValueError, match="RAG_LLM_MODEL"):
+        get_model_provider(RuntimeSettings(llm_provider="openrouter", llm_api_key="test-key")).llm()
 
 
 def test_model_provider_rejects_unknown_provider():
