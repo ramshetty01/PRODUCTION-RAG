@@ -52,6 +52,7 @@ def test_readme_contains_portfolio_demo_walkthrough():
     assert "faithfulness passed: 1.00 >= 0.90" in readme
     assert "python scripts/export_evaluation_report.py" in readme
     assert "/evaluation" in readme
+    assert "RAG_API_KEYS=public-key:public,admin-key:public|admin" in readme
     assert "[Reranking](docs/RERANKING.md)" in readme
 
 

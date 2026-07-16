@@ -78,12 +78,18 @@ def test_demo_frontend_assets_are_served():
     assert "Production RAG Demo Console" in page.text
     assert "Chat with your data" in page.text
     assert "What evidence is required before vendor onboarding?" in page.text
+    assert "authType" in page.text
+    assert "credential" in page.text
+    assert "data-auth-preset=\"admin\"" in page.text
     assert "documentUpload" in page.text
     assert "evalFaithfulness" in page.text
     assert "/query" in script.text
     assert "/upload" in script.text
     assert "/evaluation" in script.text
+    assert "Authorization" in script.text
+    assert "X-API-Key" in script.text
     assert ".workspace" in styles.text
+    assert ".auth-strip" in styles.text
     assert ".upload-form" in styles.text
     assert "/demo/fonts/KMR_Apparat_Light.woff2" in styles.text
     assert "https://spur.us" not in styles.text
@@ -189,6 +195,8 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
         "returned_chunks": 1,
         "chunk_ids": ["docs:p2:c3"],
         "auth_subject": "dev-public",
+        "auth_roles": ["public"],
+        "tenant_id": "default",
     }
     assert body["trace"]["request_id"] == body["request_id"]
     assert body["trace"]["retrieved_chunk_ids"] == ["docs:p2:c3"]
@@ -282,8 +290,10 @@ def test_query_cache_is_isolated_by_auth_context(monkeypatch):
 
     assert admin["cached"] is False
     assert admin["retrieval"]["chunk_ids"] == ["secret:p0:c0"]
+    assert admin["retrieval"]["auth_roles"] == ["admin", "public"]
     assert public["cached"] is False
     assert public["retrieval"]["chunk_ids"] == []
+    assert public["retrieval"]["auth_roles"] == ["public"]
     assert len(routes.QUERY_CACHE.values) == 2
 
 
@@ -364,6 +374,8 @@ def test_query_endpoint_derives_admin_role_from_jwt(monkeypatch):
     body = response.json()
     assert body["retrieval"]["chunk_ids"] == ["secret:p0:c0"]
     assert body["retrieval"]["auth_subject"] == "jwt:user-1"
+    assert body["retrieval"]["auth_roles"] == ["admin", "public"]
+    assert body["retrieval"]["tenant_id"] == "tenant-a"
 
 
 def test_query_endpoint_rejects_missing_and_invalid_api_key_when_configured(monkeypatch):

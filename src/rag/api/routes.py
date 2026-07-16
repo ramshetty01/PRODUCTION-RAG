@@ -420,6 +420,8 @@ def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_conte
                 "returned_chunks": len(chunks),
                 "chunk_ids": [chunk.metadata.get("chunk_id") for chunk in chunks],
                 "auth_subject": auth_context.subject,
+                "auth_roles": sorted(auth_context.roles),
+                "tenant_id": auth_context.tenant_id,
             },
             "trace": event.to_log_dict(),
             "cached": False,
