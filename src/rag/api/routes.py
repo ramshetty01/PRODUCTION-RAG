@@ -407,7 +407,7 @@ def list_documents(workspace_id: str | None = None):
 
 
 @router.delete("/documents/{document_id}", response_model=DeleteDocumentResponse)
-def delete_document(document_id: str, workspace_id: str | None = None, persist_dir: str = SETTINGS.vector_db_path):
+def delete_document(document_id: str, workspace_id: str | None = None, persist_dir: str | None = None):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     manifest_path = _document_manifest_path()
     manifest = load_manifest(manifest_path)
@@ -417,7 +417,7 @@ def delete_document(document_id: str, workspace_id: str | None = None, persist_d
     if safe_workspace_id and record.get("workspace_id") != safe_workspace_id:
         raise HTTPException(status_code=404, detail="document not found")
 
-    vectorstore = load_vectorstore(_safe_api_path(persist_dir), settings=SETTINGS)
+    vectorstore = load_vectorstore(_safe_api_path(persist_dir or SETTINGS.vector_db_path), settings=SETTINGS)
     delete_filter = {"document_id": document_id}
     if record.get("workspace_id"):
         delete_filter["workspace_id"] = record["workspace_id"]
@@ -436,7 +436,7 @@ def delete_document(document_id: str, workspace_id: str | None = None, persist_d
 
 
 @router.post("/documents/{document_id}/reindex", response_model=UploadIngestResponse)
-def reindex_document(document_id: str, workspace_id: str | None = None, persist_dir: str = SETTINGS.vector_db_path):
+def reindex_document(document_id: str, workspace_id: str | None = None, persist_dir: str | None = None):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     manifest_path = _document_manifest_path()
     manifest = load_manifest(manifest_path)
@@ -458,7 +458,11 @@ def reindex_document(document_id: str, workspace_id: str | None = None, persist_
         for chunk in chunks:
             chunk.metadata["workspace_id"] = workspace
 
-    vectorstore = build_vector_db(chunks, persist_directory=_safe_api_path(persist_dir), settings=SETTINGS)
+    vectorstore = build_vector_db(
+        chunks,
+        persist_directory=_safe_api_path(persist_dir or SETTINGS.vector_db_path),
+        settings=SETTINGS,
+    )
     vector_records = count_records(vectorstore)
     decision = plan_document_ingestion(source_path, manifest, document_id=document_id)
     record_document_ingestion(manifest, decision, source_path, chunk_count=len(chunks))
