@@ -38,7 +38,7 @@ memory requests/limits, and a PersistentVolumeClaim for `/app/chroma_db`.
 
 `deploy/render.yaml` defines a public web service for the API and browser demo.
 Create the service from the blueprint, set any real secrets in Render, and keep
-`RAG_BOOTSTRAP_DEMO_INDEX=true` for a reviewer-ready sample index.
+`RAG_BOOTSTRAP_DEMO_INDEX=true` for a reviewer-ready enterprise corpus index.
 
 The expected URL shape is:
 

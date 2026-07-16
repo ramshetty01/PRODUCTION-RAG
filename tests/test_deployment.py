@@ -92,7 +92,7 @@ def test_render_blueprint_defines_public_demo_service():
     assert "RAG_API_KEYS" in render
     assert "sync: false" in render
     assert "uvicorn main:app" in start
-    assert "scripts/ingest.py" in start
+    assert "scripts/ingest_corpus.py" in start
     assert "--manifest \"$RAG_MANIFEST_PATH\"" in start
 
 

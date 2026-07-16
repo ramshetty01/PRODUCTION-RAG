@@ -38,6 +38,12 @@ Ingest the sample PDF and rebuild the generated vector database:
 python scripts/ingest.py --pdf docs.pdf --build-vector-db
 ```
 
+Ingest the enterprise demo corpus used by the browser demo:
+
+```bash
+python scripts/ingest_corpus.py
+```
+
 Query the persisted database:
 
 ```bash
@@ -103,9 +109,10 @@ curl -X POST http://localhost:8000/query \
 
 ## Portfolio Demo
 
-This repo demonstrates a production-style RAG lifecycle: ingestion, chunking,
-vector persistence, hybrid retrieval, reranking, grounded generation,
-monitoring, and evaluation gates.
+This repo demonstrates a production-style RAG lifecycle over an enterprise
+security and vendor-risk corpus: ingestion, chunking, vector persistence,
+hybrid retrieval, reranking, grounded generation, monitoring, and evaluation
+gates.
 
 Run the demo from a fresh checkout:
 
@@ -114,22 +121,23 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python scripts/ingest.py --pdf docs.pdf --build-vector-db
+python scripts/ingest_corpus.py
 ```
 
 Ask a cited question:
 
 ```bash
-python scripts/query.py "What is a GitHub Actions runner?"
+python scripts/query.py "What evidence is required before vendor onboarding?"
 ```
 
 Expected shape:
 
 ```text
-A runner is a server that runs workflows when they are triggered. [docs:p2:c2]
+Vendors that process customer data must provide SOC 2 Type II evidence before
+production onboarding. [vendor-risk-policy:p0:c0]
 
 Citations:
-- docs:p2:c2 docs.pdf page 2
+- vendor-risk-policy:p0:c0 vendor-risk-policy.md page 0
 ```
 
 Try a lexical or hybrid-style question through the API:
@@ -138,7 +146,7 @@ Try a lexical or hybrid-style question through the API:
 python -m uvicorn main:app --reload
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
-  -d '{"query":"Where are workflow files stored?","retrieval_mode":"hybrid","top_k":4}'
+  -d '{"query":"How fast must production authentication incidents be reviewed?","retrieval_mode":"hybrid","top_k":4}'
 ```
 
 The response includes `retrieval.mode`, `retrieval.chunk_ids`, answer citations,
@@ -149,7 +157,7 @@ Try an unsupported question:
 ```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
-  -d '{"query":"What are GitHub Actions billing minute limits?","retrieval_mode":"semantic"}'
+  -d '{"query":"What is the vendor bank account number?","retrieval_mode":"semantic"}'
 ```
 
 Expected answer shape:

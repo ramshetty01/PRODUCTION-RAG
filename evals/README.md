@@ -17,13 +17,15 @@ Each line is one JSON object with these fields:
 - `retrieval_mode`: expected retrieval slice such as semantic, exact, hybrid,
   sparse, or reranked.
 
-The committed dataset contains 60 verified examples across `docs.pdf` and the
-`evals/fixtures/security-policy.md` representative policy fixture. It covers
-factual definition questions, exact lexical queries, citation-heavy checks,
-refusal boundaries, multi-hop questions, permission-sensitive examples,
-adversarial prompt attempts, and retrieval-mode slices for semantic, exact,
-hybrid, sparse, and reranked behavior. Grow it toward 100-200 verified examples
-as more source documents and production failure cases are added.
+The committed dataset contains verified examples across `docs.pdf`, the
+`evals/fixtures/security-policy.md` representative policy fixture, and the
+enterprise demo corpus under `data/raw/`. It covers factual definition
+questions, exact lexical queries, citation-heavy checks, refusal boundaries,
+multi-hop questions, permission-sensitive examples, adversarial prompt attempts,
+vendor-risk policy, security operations policy, and retrieval-mode slices for
+semantic, exact, hybrid, sparse, and reranked behavior. Grow it toward 100-200
+verified examples as more source documents and production failure cases are
+added.
 
 ## Running Offline Evaluation
 
