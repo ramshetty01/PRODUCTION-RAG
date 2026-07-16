@@ -50,6 +50,8 @@ def test_readme_contains_portfolio_demo_walkthrough():
     assert '"retrieval_mode":"hybrid"' in readme
     assert "The answer is not available in the retrieved context." in readme
     assert "faithfulness passed: 1.00 >= 0.90" in readme
+    assert "python scripts/export_evaluation_report.py" in readme
+    assert "/evaluation" in readme
     assert "[Reranking](docs/RERANKING.md)" in readme
 
 

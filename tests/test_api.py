@@ -61,8 +61,10 @@ def test_demo_frontend_assets_are_served():
     assert "Chat with your data" in page.text
     assert "What evidence is required before vendor onboarding?" in page.text
     assert "documentUpload" in page.text
+    assert "evalFaithfulness" in page.text
     assert "/query" in script.text
     assert "/upload" in script.text
+    assert "/evaluation" in script.text
     assert ".workspace" in styles.text
     assert ".upload-form" in styles.text
     assert "/demo/fonts/KMR_Apparat_Light.woff2" in styles.text
@@ -71,6 +73,20 @@ def test_demo_frontend_assets_are_served():
     assert script.headers["content-type"].startswith("application/javascript")
     assert font.status_code == 200
     assert font.headers["content-type"].startswith("font/woff2")
+
+
+def test_evaluation_endpoint_returns_dashboard_metrics():
+    client = TestClient(routes.create_app())
+
+    response = client.get("/evaluation")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["quality_gate"]["passed"] is True
+    assert body["metrics"]["faithfulness"] == 1.0
+    assert body["metrics"]["citation_coverage"] == 1.0
+    assert body["metrics"]["refusal_accuracy"] == 1.0
+    assert body["dataset"]["total_cases"] >= 66
 
 
 def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch):

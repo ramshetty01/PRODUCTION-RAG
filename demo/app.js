@@ -18,6 +18,11 @@ const traceMode = document.querySelector("#traceMode");
 const traceChunks = document.querySelector("#traceChunks");
 const traceSubject = document.querySelector("#traceSubject");
 const traceCost = document.querySelector("#traceCost");
+const evalStatus = document.querySelector("#evalStatus");
+const evalFaithfulness = document.querySelector("#evalFaithfulness");
+const evalCitations = document.querySelector("#evalCitations");
+const evalRefusals = document.querySelector("#evalRefusals");
+const evalDataset = document.querySelector("#evalDataset");
 const metricRequests = document.querySelector("#metricRequests");
 const metricLatency = document.querySelector("#metricLatency");
 const metricStatus = document.querySelector("#metricStatus");
@@ -100,6 +105,30 @@ function renderError(error) {
 function parseMetric(body, metricName) {
   const match = body.match(new RegExp(`^${metricName}\\\\s+([^\\\\n]+)$`, "m"));
   return match ? match[1] : "0";
+}
+
+function percent(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? `${Math.round(numeric * 100)}%` : "-";
+}
+
+async function refreshEvaluation() {
+  try {
+    const response = await fetch("/evaluation");
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || `HTTP ${response.status}`);
+    }
+    evalStatus.textContent = payload.quality_gate?.passed ? "Passing" : "Failing";
+    evalStatus.className = `pill ${payload.quality_gate?.passed ? "" : "error"}`.trim();
+    evalFaithfulness.textContent = percent(payload.metrics?.faithfulness);
+    evalCitations.textContent = percent(payload.metrics?.citation_coverage);
+    evalRefusals.textContent = percent(payload.metrics?.refusal_accuracy);
+    evalDataset.textContent = `${payload.dataset?.verified_cases || 0}/${payload.dataset?.total_cases || 0}`;
+  } catch {
+    evalStatus.textContent = "Offline";
+    evalStatus.className = "pill error";
+  }
 }
 
 async function refreshMetrics() {
@@ -217,3 +246,4 @@ form.addEventListener("submit", askQuestion);
 uploadForm.addEventListener("submit", uploadDocument);
 checkHealth();
 refreshMetrics();
+refreshEvaluation();
