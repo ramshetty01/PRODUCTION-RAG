@@ -87,6 +87,7 @@ def test_demo_frontend_assets_are_served():
     assert "/upload" in script.text
     assert "rag_workspace_id" in script.text
     assert "workspace_id" in script.text
+    assert "/documents?workspace_id=" in script.text
     assert "/evaluation" in script.text
     assert "Authorization" in script.text
     assert "X-API-Key" in script.text
@@ -180,6 +181,91 @@ def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypat
     assert unsupported.json()["detail"] == "supported upload types: PDF, Markdown, or text"
     assert empty.status_code == 400
     assert empty.json()["detail"] == "uploaded file is empty"
+
+
+def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "policy.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Policy\n\nVendors require evidence.", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        """
+{
+  "documents": {
+    "policy": {
+      "chunk_count": 1,
+      "content_hash": "hash",
+      "document_id": "policy",
+      "document_version": "v1",
+      "error": null,
+      "filename": "policy.md",
+      "ingested_at": "2026-07-17T00:00:00Z",
+      "previous_version": null,
+      "source_path": "%s",
+      "status": "indexed",
+      "workspace_id": "workspace-a"
+    }
+  }
+}
+"""
+        % source,
+        encoding="utf-8",
+    )
+
+    class FakeCollection:
+        def __init__(self):
+            self.count_value = 3
+
+        def count(self):
+            return self.count_value
+
+        def delete(self, where):
+            self.deleted_where = where
+            self.count_value = 0
+
+    class FakeVectorStore:
+        def __init__(self):
+            self._collection = FakeCollection()
+
+    built = {}
+
+    def fake_build_vector_db(chunks, persist_directory, settings):
+        built["chunks"] = list(chunks)
+        built["persist_directory"] = persist_directory
+        return FakeVectorStore()
+
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            manifest_path=str(manifest_path),
+            vector_db_path=str(tmp_path / "chroma_db"),
+            chunk_size=12,
+            chunk_overlap=2,
+        ),
+    )
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    monkeypatch.setattr(routes, "build_vector_db", fake_build_vector_db)
+    client = TestClient(routes.create_app())
+
+    listed = client.get("/documents", params={"workspace_id": "workspace-a"})
+    reindexed = client.post("/documents/policy/reindex", params={"workspace_id": "workspace-a"})
+    deleted = client.delete("/documents/policy", params={"workspace_id": "workspace-a"})
+
+    assert listed.status_code == 200
+    assert listed.json()["documents"][0]["document_id"] == "policy"
+    assert reindexed.status_code == 200
+    assert reindexed.json()["document_version"] == "v2"
+    assert built["chunks"][0].metadata["workspace_id"] == "workspace-a"
+    assert deleted.status_code == 200
+    assert deleted.json() == {
+        "document_id": "policy",
+        "status": "deleted",
+        "vector_records_deleted": 3,
+    }
+    assert not source.exists()
 
 
 def test_query_endpoint_isolates_results_by_workspace(monkeypatch):

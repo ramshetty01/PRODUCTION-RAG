@@ -159,6 +159,11 @@ async function checkHealth() {
   }
 }
 
+async function refreshDocuments() {
+  const response = await fetch(`/documents?workspace_id=${encodeURIComponent(workspaceId)}`);
+  return response.ok ? response.json() : {documents: []};
+}
+
 async function askQuestion(event) {
   event.preventDefault();
   askButton.disabled = true;
@@ -238,6 +243,7 @@ async function uploadDocument(event) {
       throw new Error(payload.detail || `HTTP ${response.status}`);
     }
     uploadStatus.textContent = `${payload.chunks_created} chunks indexed`;
+    await refreshDocuments();
     metricStatus.textContent = "Indexed";
     setStatus("Online");
   } catch (error) {

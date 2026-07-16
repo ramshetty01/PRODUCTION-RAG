@@ -128,3 +128,12 @@ def count_records(vectorstore) -> int:
     if client is not None and collection_name:
         return int(client.count(collection_name=collection_name, exact=True).count)
     raise TypeError("vector store does not expose a supported record count API")
+
+
+def delete_records_by_metadata(vectorstore, metadata_filter: dict) -> int | None:
+    if not hasattr(vectorstore, "_collection"):
+        raise TypeError("vector store does not expose a supported metadata delete API")
+    before = count_records(vectorstore)
+    vectorstore._collection.delete(where=metadata_filter)
+    after = count_records(vectorstore)
+    return before - after

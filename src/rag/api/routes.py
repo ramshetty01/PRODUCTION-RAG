@@ -29,7 +29,7 @@ from src.rag.performance import build_query_cache, estimate_llm_cost
 from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode
 from src.rag.security import build_rate_limiter, validate_path, validate_query
-from src.rag.vector_store import build_vector_db, count_records
+from src.rag.vector_store import build_vector_db, count_records, delete_records_by_metadata
 
 
 SETTINGS = load_settings()
@@ -132,6 +132,27 @@ class UploadIngestResponse(BaseModel):
     chunk_summary: dict | None = None
 
 
+class DocumentRecordResponse(BaseModel):
+    document_id: str
+    document_version: str
+    filename: str | None = None
+    workspace_id: str | None = None
+    status: str
+    chunk_count: int
+    source_path: str
+    ingested_at: str | None = None
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentRecordResponse]
+
+
+class DeleteDocumentResponse(BaseModel):
+    document_id: str
+    status: str
+    vector_records_deleted: int | None = None
+
+
 router = APIRouter()
 QUERY_CACHE = build_query_cache(SETTINGS.cache_backend, SETTINGS.redis_url)
 RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_url, max_requests=120, window_seconds=60)
@@ -209,6 +230,19 @@ def _effective_metadata_filters(request: QueryRequest) -> dict:
     if workspace_id:
         metadata_filters["workspace_id"] = workspace_id
     return metadata_filters
+
+
+def _document_manifest_path() -> Path:
+    return _safe_api_path(SETTINGS.manifest_path)
+
+
+def _document_records(workspace_id: str | None = None) -> list[dict]:
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    manifest = load_manifest(_document_manifest_path())
+    records = list(manifest.get("documents", {}).values())
+    if safe_workspace_id:
+        records = [record for record in records if record.get("workspace_id") == safe_workspace_id]
+    return sorted(records, key=lambda record: record.get("ingested_at") or "", reverse=True)
 
 
 def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_context: AuthContext):
@@ -345,6 +379,7 @@ async def upload_document(file: UploadFile = File(...), workspace_id: str | None
         vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
         vector_records = count_records(vectorstore)
         record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
+        manifest["documents"][decision.document_id]["filename"] = safe_name
         if safe_workspace_id:
             manifest["documents"][decision.document_id]["workspace_id"] = safe_workspace_id
         save_manifest(manifest, manifest_path)
@@ -364,6 +399,85 @@ async def upload_document(file: UploadFile = File(...), workspace_id: str | None
         raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/documents", response_model=DocumentListResponse)
+def list_documents(workspace_id: str | None = None):
+    return DocumentListResponse(documents=[DocumentRecordResponse(**record) for record in _document_records(workspace_id)])
+
+
+@router.delete("/documents/{document_id}", response_model=DeleteDocumentResponse)
+def delete_document(document_id: str, workspace_id: str | None = None, persist_dir: str = SETTINGS.vector_db_path):
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    manifest_path = _document_manifest_path()
+    manifest = load_manifest(manifest_path)
+    record = manifest.get("documents", {}).get(document_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    if safe_workspace_id and record.get("workspace_id") != safe_workspace_id:
+        raise HTTPException(status_code=404, detail="document not found")
+
+    vectorstore = load_vectorstore(_safe_api_path(persist_dir), settings=SETTINGS)
+    delete_filter = {"document_id": document_id}
+    if record.get("workspace_id"):
+        delete_filter["workspace_id"] = record["workspace_id"]
+    deleted_records = delete_records_by_metadata(vectorstore, delete_filter)
+
+    source_path = _safe_api_path(record["source_path"])
+    source_path.unlink(missing_ok=True)
+    del manifest["documents"][document_id]
+    save_manifest(manifest, manifest_path)
+    _clear_query_cache()
+    return DeleteDocumentResponse(
+        document_id=document_id,
+        status="deleted",
+        vector_records_deleted=deleted_records,
+    )
+
+
+@router.post("/documents/{document_id}/reindex", response_model=UploadIngestResponse)
+def reindex_document(document_id: str, workspace_id: str | None = None, persist_dir: str = SETTINGS.vector_db_path):
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    manifest_path = _document_manifest_path()
+    manifest = load_manifest(manifest_path)
+    record = manifest.get("documents", {}).get(document_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    if safe_workspace_id and record.get("workspace_id") != safe_workspace_id:
+        raise HTTPException(status_code=404, detail="document not found")
+
+    source_path = _safe_api_path(record["source_path"])
+    if not source_path.exists():
+        raise HTTPException(status_code=404, detail="source file not found")
+
+    current_version = int(str(record["document_version"]).lstrip("v") or "1")
+    document_version = f"v{current_version + 1}"
+    chunks = _chunks_for_path(source_path, document_version)
+    workspace = record.get("workspace_id")
+    if workspace:
+        for chunk in chunks:
+            chunk.metadata["workspace_id"] = workspace
+
+    vectorstore = build_vector_db(chunks, persist_directory=_safe_api_path(persist_dir), settings=SETTINGS)
+    vector_records = count_records(vectorstore)
+    decision = plan_document_ingestion(source_path, manifest, document_id=document_id)
+    record_document_ingestion(manifest, decision, source_path, chunk_count=len(chunks))
+    manifest["documents"][document_id]["document_version"] = document_version
+    manifest["documents"][document_id]["filename"] = record.get("filename") or source_path.name
+    manifest["documents"][document_id]["workspace_id"] = workspace
+    save_manifest(manifest, manifest_path)
+    _clear_query_cache()
+    return UploadIngestResponse(
+        filename=record.get("filename") or source_path.name,
+        saved_path=str(source_path),
+        document_id=document_id,
+        document_version=document_version,
+        workspace_id=workspace or "default",
+        status="indexed",
+        chunks_created=len(chunks),
+        vector_records=vector_records,
+        chunk_summary=chunk_token_summary(chunks),
+    )
 
 
 @router.post("/query", response_model=QueryResponse)
