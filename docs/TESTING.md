@@ -51,6 +51,33 @@ pip-audit -r requirements.txt --progress-spinner off
 trivy fs .
 ```
 
+## Load And Reliability Testing
+
+Run the local API with an indexed corpus, then execute the lightweight load
+test:
+
+```bash
+python -m uvicorn main:app --reload
+python scripts/load_test.py http://localhost:8000 \
+  --requests-per-endpoint 25 \
+  --concurrency 8 \
+  --api-key public-key \
+  --output reports/load-test.json
+```
+
+The script exercises `/health`, `/metrics`, and `/query`. The JSON report
+includes total requests, status counts, error rate, rate-limited request count,
+p50/p95/max latency, and query cache hit rate.
+
+Expected local thresholds:
+
+- p95 latency at or below 3000 ms for the combined endpoint mix.
+- error rate at or below 1 percent, excluding intentional 429 rate-limit
+  pressure tests.
+- 429 responses should appear when concurrency intentionally exceeds the
+  configured request window.
+- cache hit rate should increase when repeated `/query` payloads are used.
+
 ## Adding Tests
 
 When adding behavior, include a focused test near the behavior owner:
@@ -60,3 +87,4 @@ When adding behavior, include a focused test near the behavior owner:
 - `tests/test_retrieval.py` for retrieval, generation, ranking, and refusal.
 - `tests/test_api.py` for API contract behavior.
 - `tests/test_evals.py` for evaluation dataset and quality gates.
+- `tests/test_load_testing.py` for load-test report calculations.

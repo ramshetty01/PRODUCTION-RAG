@@ -29,6 +29,9 @@ def test_testing_strategy_documents_baseline_test_command():
     assert ".github/workflows/security-scan.yml" in testing
     assert "pip-audit -r requirements.txt" in testing
     assert "trivy fs ." in testing
+    assert "python scripts/load_test.py" in testing
+    assert "p95 latency" in testing
+    assert "tests/test_load_testing.py" in testing
 
 
 def test_readme_documents_runtime_configuration():
