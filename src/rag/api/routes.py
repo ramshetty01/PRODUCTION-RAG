@@ -28,7 +28,7 @@ from src.rag.performance import build_query_cache, estimate_llm_cost
 from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode
 from src.rag.security import build_rate_limiter, validate_path, validate_query
-from src.rag.vector_store import build_chroma_db, count_records
+from src.rag.vector_store import build_vector_db, count_records
 
 
 SETTINGS = load_settings()
@@ -269,7 +269,7 @@ def ingest(request: IngestRequest):
         token_counts = [count_tokens(chunk.page_content) for chunk in chunks]
         vector_records = None
         if request.build_vector_db:
-            vectorstore = build_chroma_db(chunks, persist_directory=persist_dir)
+            vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
             vector_records = count_records(vectorstore)
         record_document_ingestion(manifest, decision, pdf_path, chunk_count=len(chunks))
         save_manifest(manifest, manifest_path)
@@ -312,7 +312,7 @@ async def upload_document(file: UploadFile = File(...)):
         manifest = load_manifest(manifest_path)
         decision = plan_document_ingestion(saved_path, manifest)
         chunks = _chunks_for_path(saved_path, decision.document_version)
-        vectorstore = build_chroma_db(chunks, persist_directory=persist_dir)
+        vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
         vector_records = count_records(vectorstore)
         record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
         save_manifest(manifest, manifest_path)
@@ -360,7 +360,7 @@ def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_conte
 
     try:
         with trace_latency(event):
-            vectorstore = load_vectorstore(_safe_api_path(request.persist_dir))
+            vectorstore = load_vectorstore(_safe_api_path(request.persist_dir), settings=SETTINGS)
             retrieval_mode, chunks = _retrieve_for_request(
                 safe_query,
                 request,

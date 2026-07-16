@@ -119,6 +119,11 @@ Environment variables are documented in `.env.example`:
 - `RAG_HOST`: bind host for Uvicorn.
 - `RAG_PORT`: API port.
 - `RAG_VECTOR_DB_PATH`: generated ChromaDB directory.
+- `RAG_VECTOR_BACKEND`: `chroma` by default, or `qdrant` for a managed vector
+  service.
+- `RAG_VECTOR_COLLECTION`: collection name used by the active vector backend.
+- `RAG_QDRANT_URL` and `RAG_QDRANT_API_KEY`: Qdrant connection settings when
+  `RAG_VECTOR_BACKEND=qdrant`.
 - `RAG_MANIFEST_PATH`: ingestion manifest location.
 - `RAG_EMBEDDING_MODEL`: default embedding model name.
 - `RAG_TOP_K`: default retrieval size.

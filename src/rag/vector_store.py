@@ -7,6 +7,8 @@ from src.rag.chunking import DEFAULT_DB_PATH, EMBEDDING_MODEL
 from src.rag.config import RuntimeSettings
 from src.rag.models import get_model_provider
 
+SUPPORTED_VECTOR_BACKENDS = {"chroma", "qdrant"}
+
 
 def create_embeddings(model_name: str = EMBEDDING_MODEL, settings: RuntimeSettings | None = None):
     if settings is not None:
@@ -45,5 +47,84 @@ def load_chroma_db(
     )
 
 
+def _require_qdrant():
+    try:
+        from langchain_qdrant import QdrantVectorStore
+    except ImportError as exc:
+        raise RuntimeError(
+            "Qdrant backend requires the optional langchain-qdrant package. "
+            "Install it and set RAG_VECTOR_BACKEND=qdrant with RAG_QDRANT_URL."
+        ) from exc
+    return QdrantVectorStore
+
+
+def _qdrant_connection(settings: RuntimeSettings) -> dict:
+    if not settings.qdrant_url:
+        raise ValueError("RAG_QDRANT_URL is required when RAG_VECTOR_BACKEND=qdrant")
+    connection = {"url": settings.qdrant_url}
+    if settings.qdrant_api_key:
+        connection["api_key"] = settings.qdrant_api_key
+    return connection
+
+
+def build_vector_db(
+    chunks,
+    persist_directory: str | Path = DEFAULT_DB_PATH,
+    embedding_function=None,
+    settings: RuntimeSettings | None = None,
+):
+    settings = settings or RuntimeSettings()
+    backend = settings.vector_backend.lower()
+    if backend not in SUPPORTED_VECTOR_BACKENDS:
+        raise ValueError(f"Unsupported vector backend: {settings.vector_backend}")
+    if backend == "chroma":
+        return build_chroma_db(
+            chunks,
+            persist_directory=persist_directory,
+            embedding_function=embedding_function,
+            collection_name=settings.vector_collection,
+        )
+
+    qdrant = _require_qdrant()
+    embeddings = embedding_function or create_embeddings(settings=settings)
+    return qdrant.from_documents(
+        documents=list(chunks),
+        embedding=embeddings,
+        collection_name=settings.vector_collection,
+        **_qdrant_connection(settings),
+    )
+
+
+def load_vector_db(
+    persist_directory: str | Path = DEFAULT_DB_PATH,
+    embedding_function=None,
+    settings: RuntimeSettings | None = None,
+):
+    settings = settings or RuntimeSettings()
+    backend = settings.vector_backend.lower()
+    if backend not in SUPPORTED_VECTOR_BACKENDS:
+        raise ValueError(f"Unsupported vector backend: {settings.vector_backend}")
+    if backend == "chroma":
+        return load_chroma_db(
+            persist_directory=persist_directory,
+            embedding_function=embedding_function,
+            collection_name=settings.vector_collection,
+        )
+
+    qdrant = _require_qdrant()
+    embeddings = embedding_function or create_embeddings(settings=settings)
+    return qdrant(
+        embedding=embeddings,
+        collection_name=settings.vector_collection,
+        **_qdrant_connection(settings),
+    )
+
+
 def count_records(vectorstore) -> int:
-    return vectorstore._collection.count()
+    if hasattr(vectorstore, "_collection"):
+        return vectorstore._collection.count()
+    client = getattr(vectorstore, "client", None)
+    collection_name = getattr(vectorstore, "collection_name", None) or getattr(vectorstore, "_collection_name", None)
+    if client is not None and collection_name:
+        return int(client.count(collection_name=collection_name, exact=True).count)
+    raise TypeError("vector store does not expose a supported record count API")

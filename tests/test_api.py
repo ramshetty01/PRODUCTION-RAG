@@ -105,12 +105,13 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
 
     built = {}
 
-    def fake_build_chroma_db(chunks, persist_directory):
+    def fake_build_vector_db(chunks, persist_directory, settings):
         built["chunks"] = chunks
         built["persist_directory"] = persist_directory
+        built["backend"] = settings.vector_backend
         return object()
 
-    monkeypatch.setattr(routes, "build_chroma_db", fake_build_chroma_db)
+    monkeypatch.setattr(routes, "build_vector_db", fake_build_vector_db)
     monkeypatch.setattr(routes, "count_records", lambda _vectorstore: len(built["chunks"]))
     client = TestClient(routes.create_app())
 
@@ -129,6 +130,7 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
     assert body["vector_records"] == len(built["chunks"])
     assert Path(body["saved_path"]).read_text(encoding="utf-8").startswith("# Policy")
     assert built["persist_directory"] == tmp_path / "chroma_db"
+    assert built["backend"] == "chroma"
     assert (tmp_path / "data" / "processed" / "ingestion_manifest.json").exists()
 
 
@@ -153,7 +155,7 @@ def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypat
 
 def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     routes.QUERY_CACHE.values.clear()
-    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     client = TestClient(routes.create_app())
 
     response = client.post("/query", json={"query": "What does a runner do?", "top_k": 2})
@@ -190,7 +192,7 @@ def test_query_endpoint_rejects_prompt_injection():
 
 def test_query_endpoint_redacts_pii_in_trace(monkeypatch):
     routes.QUERY_CACHE.values.clear()
-    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     client = TestClient(routes.create_app())
 
     response = client.post("/query", json={"query": "What does a runner do? email me at user@example.com", "top_k": 2})
@@ -202,7 +204,7 @@ def test_query_endpoint_redacts_pii_in_trace(monkeypatch):
 
 def test_query_endpoint_caches_repeated_query(monkeypatch):
     routes.QUERY_CACHE.values.clear()
-    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     client = TestClient(routes.create_app())
 
     first = client.post("/query", json={"query": "What does a runner do?", "top_k": 2}).json()
@@ -217,7 +219,7 @@ def test_query_endpoint_caches_repeated_query(monkeypatch):
 def test_query_cache_is_isolated_by_auth_context(monkeypatch):
     routes.QUERY_CACHE.values.clear()
     monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("public-key:public,admin-key:public|admin"))
-    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     client = TestClient(routes.create_app())
 
     admin = client.post(
@@ -248,7 +250,7 @@ def test_query_cache_is_isolated_by_auth_context(monkeypatch):
 
 def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
     routes.QUERY_CACHE.values.clear()
-    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     client = TestClient(routes.create_app())
 
     response = client.post(
@@ -269,7 +271,7 @@ def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
 def test_query_endpoint_derives_admin_role_from_api_key(monkeypatch):
     routes.QUERY_CACHE.values.clear()
     monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
-    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     client = TestClient(routes.create_app())
 
     response = client.post(
@@ -295,7 +297,7 @@ def test_query_endpoint_derives_admin_role_from_jwt(monkeypatch):
         "SETTINGS",
         RuntimeSettings(auth_mode="jwt", jwt_secret="secret", jwt_issuer="issuer", jwt_audience="rag-api"),
     )
-    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     token = sign_jwt(
         {
             "sub": "user-1",
@@ -341,7 +343,7 @@ def test_query_endpoint_rejects_missing_and_invalid_api_key_when_configured(monk
 
 def test_query_endpoint_supports_exact_retrieval_mode(monkeypatch):
     routes.QUERY_CACHE.values.clear()
-    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir: FakeVectorStore())
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     client = TestClient(routes.create_app())
 
     response = client.post(
@@ -367,7 +369,7 @@ def test_query_endpoint_rejects_unknown_retrieval_mode():
 
 def test_query_endpoint_returns_clean_json_errors(monkeypatch):
     routes.QUERY_CACHE.values.clear()
-    def raise_error(_persist_dir):
+    def raise_error(_persist_dir, **_kwargs):
         raise RuntimeError("vector store missing")
 
     monkeypatch.setattr(routes, "load_vectorstore", raise_error)

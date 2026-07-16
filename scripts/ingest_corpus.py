@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_text_file, chunk_token_summary
 from src.rag.config import load_settings
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
-from src.rag.vector_store import build_chroma_db, count_records
+from src.rag.vector_store import build_vector_db, count_records
 
 
 DEFAULT_CORPUS = [
@@ -79,7 +79,7 @@ def ingest_sources(
             continue
 
         chunks = _chunk_source(source, decision.document_version, chunk_size, chunk_overlap)
-        vectorstore = build_chroma_db(chunks, persist_directory=Path(persist_dir))
+        vectorstore = build_vector_db(chunks, persist_directory=Path(persist_dir), settings=settings)
         record_document_ingestion(manifest, decision, source, chunk_count=len(chunks))
         indexed.append(
             {

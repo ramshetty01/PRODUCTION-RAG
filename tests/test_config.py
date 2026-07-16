@@ -5,6 +5,10 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     for key in [
         "RAG_TOP_K",
         "RAG_RETRIEVAL_MODE",
+        "RAG_VECTOR_BACKEND",
+        "RAG_VECTOR_COLLECTION",
+        "RAG_QDRANT_URL",
+        "RAG_QDRANT_API_KEY",
         "RAG_CHUNK_SIZE",
         "RAG_CHUNK_OVERLAP",
         "RAG_LLM_PROVIDER",
@@ -24,6 +28,10 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
 
     assert settings.top_k == 4
     assert settings.retrieval_mode == "semantic"
+    assert settings.vector_backend == "chroma"
+    assert settings.vector_collection == "rag_chunks"
+    assert settings.qdrant_url == ""
+    assert settings.qdrant_api_key == ""
     assert settings.chunk_size == 700
     assert settings.chunk_overlap == 100
     assert settings.llm_provider == "extractive"
@@ -43,6 +51,10 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
         "\n".join(
             [
                 "RAG_VECTOR_DB_PATH=/tmp/chroma",
+                "RAG_VECTOR_BACKEND=qdrant",
+                "RAG_VECTOR_COLLECTION=prod_chunks",
+                "RAG_QDRANT_URL=https://qdrant.example",
+                "RAG_QDRANT_API_KEY=qdrant-key",
                 "RAG_CHUNK_SIZE=600",
                 "RAG_CHUNK_OVERLAP=80",
                 "RAG_TOP_K=6",
@@ -67,6 +79,10 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     settings = load_settings(dotenv)
 
     assert settings.vector_db_path == "/tmp/chroma"
+    assert settings.vector_backend == "qdrant"
+    assert settings.vector_collection == "prod_chunks"
+    assert settings.qdrant_url == "https://qdrant.example"
+    assert settings.qdrant_api_key == "qdrant-key"
     assert settings.chunk_size == 600
     assert settings.chunk_overlap == 80
     assert settings.top_k == 6
@@ -89,6 +105,10 @@ def test_env_example_documents_required_runtime_settings():
     env_example = open(".env.example", encoding="utf-8").read()
 
     assert "RAG_CHUNK_SIZE=" in env_example
+    assert "RAG_VECTOR_BACKEND=" in env_example
+    assert "RAG_VECTOR_COLLECTION=" in env_example
+    assert "RAG_QDRANT_URL=" in env_example
+    assert "RAG_QDRANT_API_KEY=" in env_example
     assert "RAG_CHUNK_OVERLAP=" in env_example
     assert "RAG_TOP_K=" in env_example
     assert "RAG_RETRIEVAL_MODE=" in env_example
