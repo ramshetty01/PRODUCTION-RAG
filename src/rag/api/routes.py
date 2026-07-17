@@ -281,6 +281,90 @@ def _clear_query_cache() -> None:
         QUERY_CACHE.values.clear()
 
 
+def _product_error_detail(
+    code: str,
+    message: str,
+    *,
+    retry: str,
+    request_id: str | None = None,
+    trace: dict | None = None,
+) -> dict:
+    detail = {
+        "code": code,
+        "message": message,
+        "retry": retry,
+    }
+    if request_id:
+        detail["request_id"] = request_id
+    if trace:
+        detail["trace"] = trace
+    return detail
+
+
+def _classify_query_error(exc: Exception, request_id: str, event: TraceEvent) -> dict:
+    text = str(exc).lower()
+    event.error = type(exc).__name__
+    trace = event.to_log_dict()
+    if any(term in text for term in ["vector", "chroma", "collection", "persist", "index"]):
+        return _product_error_detail(
+            "vector_store_unavailable",
+            "The document index is not available right now.",
+            retry="Reindex the corpus, then retry the question.",
+            request_id=request_id,
+            trace=trace,
+        )
+    if any(term in text for term in ["retriev", "search"]):
+        return _product_error_detail(
+            "retrieval_unavailable",
+            "We could not search the indexed corpus right now.",
+            retry="Retry the question. If it repeats, reindex the corpus.",
+            request_id=request_id,
+            trace=trace,
+        )
+    if any(term in text for term in ["llm", "model", "openrouter", "completion", "chat"]):
+        return _product_error_detail(
+            "answer_generation_unavailable",
+            "The answer model did not respond.",
+            retry="Retry the question or check the configured LLM provider.",
+            request_id=request_id,
+            trace=trace,
+        )
+    return _product_error_detail(
+        "rag_request_failed",
+        "We could not answer this question right now.",
+        retry="Retry the request. If it repeats, check the request trace.",
+        request_id=request_id,
+        trace=trace,
+    )
+
+
+def _classify_ingestion_error(exc: Exception) -> dict:
+    text = str(exc).lower()
+    if any(term in text for term in ["parse", "loader", "pdf", "docx", "pptx", "decode"]):
+        return _product_error_detail(
+            "document_parse_failed",
+            "We could not read this file.",
+            retry="Upload a clean PDF, Markdown, text, HTML, CSV, DOCX, or PPTX export.",
+        )
+    if any(term in text for term in ["embedding", "embed"]):
+        return _product_error_detail(
+            "embedding_failed",
+            "We could not create embeddings for this document.",
+            retry="Retry indexing after checking the embedding provider.",
+        )
+    if any(term in text for term in ["vector", "chroma", "collection", "persist", "index"]):
+        return _product_error_detail(
+            "index_write_failed",
+            "We could not write this document to the search index.",
+            retry="Retry indexing. If it repeats, reset or inspect the vector database.",
+        )
+    return _product_error_detail(
+        "indexing_failed",
+        "We could not index this document.",
+        retry="Retry with a smaller or cleaner document.",
+    )
+
+
 def _set_ingestion_job(job_key: str, **updates) -> None:
     with INGESTION_JOB_LOCK:
         INGESTION_JOBS[job_key] = {**INGESTION_JOBS.get(job_key, {}), **updates}
@@ -474,7 +558,9 @@ def _run_ingestion_job(job_id: str, saved_path: Path, safe_name: str, workspace_
     try:
         _index_uploaded_file(saved_path, safe_name, workspace_id, access_roles, job_id=job_id)
     except Exception as exc:
-        _set_ingestion_job(job_id, status="failed", progress=100, error=str(exc))
+        LOGGER.exception("Background ingestion job failed", extra={"job_id": job_id})
+        detail = _classify_ingestion_error(exc)
+        _set_ingestion_job(job_id, status="failed", progress=100, error=detail["message"])
 
 
 def _purge_logs() -> int:
@@ -660,8 +746,8 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
     except HTTPException:
         raise
     except Exception as exc:
-        event.error = type(exc).__name__
-        raise HTTPException(status_code=400, detail={"message": str(exc), "trace": event.to_log_dict()}) from exc
+        LOGGER.exception("RAG query failed", extra={"request_id": request_id})
+        raise HTTPException(status_code=400, detail=_classify_query_error(exc, request_id, event)) from exc
 
 
 def _sse(event: str, data: dict) -> str:
@@ -775,7 +861,8 @@ def ingest(request: IngestRequest):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        LOGGER.exception("Document ingestion failed")
+        raise HTTPException(status_code=400, detail=_classify_ingestion_error(exc)) from exc
 
 
 @router.post("/upload", response_model=UploadIngestResponse)
@@ -847,7 +934,8 @@ async def upload_document(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        LOGGER.exception("Document upload failed")
+        raise HTTPException(status_code=400, detail=_classify_ingestion_error(exc)) from exc
 
 
 @router.get("/ingestion-jobs/{job_id}", response_model=IngestionJobResponse)

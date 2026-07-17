@@ -1147,7 +1147,7 @@ def test_query_endpoint_rejects_unknown_retrieval_mode():
 def test_query_endpoint_returns_clean_json_errors(monkeypatch):
     routes.QUERY_CACHE.values.clear()
     def raise_error(_persist_dir, **_kwargs):
-        raise RuntimeError("vector store missing")
+        raise RuntimeError("vector store missing at /private/chroma")
 
     monkeypatch.setattr(routes, "load_vectorstore", raise_error)
     client = TestClient(routes.create_app())
@@ -1156,8 +1156,64 @@ def test_query_endpoint_returns_clean_json_errors(monkeypatch):
 
     assert response.status_code == 400
     body = response.json()
-    assert body["detail"]["message"] == "vector store missing"
+    assert body["detail"]["code"] == "vector_store_unavailable"
+    assert body["detail"]["message"] == "The document index is not available right now."
+    assert body["detail"]["retry"] == "Reindex the corpus, then retry the question."
+    assert "vector store missing" not in body["detail"]["message"]
+    assert body["detail"]["request_id"]
     assert body["detail"]["trace"]["error"] == "RuntimeError"
+
+
+def test_query_endpoint_returns_product_error_for_llm_failure(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+
+    def raise_error(_query, _chunks):
+        raise RuntimeError("LLM provider timeout with secret payload")
+
+    monkeypatch.setattr(routes, "generate_answer", raise_error)
+    client = TestClient(routes.create_app())
+
+    response = client.post("/query", json={"query": "What does a runner do?"})
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "answer_generation_unavailable"
+    assert body["detail"]["message"] == "The answer model did not respond."
+    assert "secret payload" not in body["detail"]["message"]
+    assert body["detail"]["trace"]["error"] == "RuntimeError"
+
+
+def test_upload_endpoint_returns_product_error_for_index_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            manifest_path=str(tmp_path / "data" / "processed" / "ingestion_manifest.json"),
+            vector_db_path=str(tmp_path / "chroma_db"),
+            chunk_size=12,
+            chunk_overlap=2,
+        ),
+    )
+
+    def raise_error(_chunks, persist_directory, settings):
+        raise RuntimeError("Chroma index write failed at /private/path")
+
+    monkeypatch.setattr(routes, "build_vector_db", raise_error)
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        data={"workspace_id": "workspace-a"},
+        files={"file": ("policy.md", b"# Policy\n\nVendors require SOC 2 evidence.", "text/markdown")},
+    )
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "index_write_failed"
+    assert body["detail"]["message"] == "We could not write this document to the search index."
+    assert "private/path" not in body["detail"]["message"]
 
 
 def test_metrics_endpoint_exports_prometheus_text():
