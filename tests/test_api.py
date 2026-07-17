@@ -46,6 +46,38 @@ class RecordingVectorStore(FakeVectorStore):
         return super().similarity_search(query, k)
 
 
+class MetadataVectorStore:
+    def similarity_search(self, query, k):
+        return [
+            Document(
+                page_content="CSV vendor control row.",
+                metadata={
+                    "source": "/tmp/controls.csv",
+                    "page": 0,
+                    "chunk_index": 0,
+                    "chunk_id": "controls:p0:c0",
+                    "document_id": "controls",
+                    "document_version": "v1",
+                    "parser": "csv",
+                    "access_roles": ["public"],
+                },
+            ),
+            Document(
+                page_content="Restricted DOCX payroll policy.",
+                metadata={
+                    "source": "/tmp/payroll.docx",
+                    "page": 0,
+                    "chunk_index": 0,
+                    "chunk_id": "payroll:p0:c0",
+                    "document_id": "payroll",
+                    "document_version": "v1",
+                    "parser": "docx",
+                    "access_roles": ["admin"],
+                },
+            ),
+        ][:k]
+
+
 class RecordingTelemetry:
     def __init__(self):
         self.spans = []
@@ -126,6 +158,11 @@ def test_demo_frontend_assets_are_served():
     assert "rag_session_id" in script.text
     assert "workspace_id" in script.text
     assert "session_id" in script.text
+    assert "filterDocument" in page.text
+    assert "filterType" in page.text
+    assert "filterRole" in page.text
+    assert "metadata_filters" in script.text
+    assert "activeFilters" in script.text
     assert "/documents?workspace_id=" in script.text
     assert "/query/stream" in script.text
     assert "/evaluation" in script.text
@@ -574,6 +611,45 @@ def test_query_endpoint_applies_metadata_filters_and_user_roles(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["retrieval"]["chunk_ids"] == []
+
+
+def test_query_endpoint_filters_by_parser_and_access_role(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(llm_provider="extractive"))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: MetadataVectorStore())
+    monkeypatch.setattr(
+        routes,
+        "generate_answer",
+        lambda query, chunks: {
+            "answer": "Restricted DOCX payroll policy. [payroll:p0:c0]",
+            "citations": [
+                {
+                    "id": "payroll:p0:c0",
+                    "source": "payroll",
+                    "source_path": "/tmp/payroll.docx",
+                    "page": 0,
+                    "chunk_index": 0,
+                    "quote": "Restricted DOCX payroll policy.",
+                }
+            ],
+            "token_usage": {"prompt_tokens": 4, "answer_tokens": 4},
+        },
+    )
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/query",
+        headers={"X-API-Key": "admin-key"},
+        json={
+            "query": "payroll policy",
+            "top_k": 2,
+            "metadata_filters": {"parser": "docx", "access_roles": "admin"},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["retrieval"]["chunk_ids"] == ["payroll:p0:c0"]
 
 
 def test_query_endpoint_derives_admin_role_from_api_key(monkeypatch):

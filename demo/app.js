@@ -3,6 +3,10 @@ const uploadForm = document.querySelector("#uploadForm");
 const queryInput = document.querySelector("#queryInput");
 const retrievalMode = document.querySelector("#retrievalMode");
 const topK = document.querySelector("#topK");
+const filterDocument = document.querySelector("#filterDocument");
+const filterType = document.querySelector("#filterType");
+const filterRole = document.querySelector("#filterRole");
+const activeFilters = document.querySelector("#activeFilters");
 const authType = document.querySelector("#authType");
 const credential = document.querySelector("#credential");
 const authBadge = document.querySelector("#authBadge");
@@ -110,13 +114,44 @@ function renderError(error) {
   cacheBadge.className = "pill error";
 }
 
+function selectedFilters() {
+  const filters = {};
+  const documentId = filterDocument.value.trim();
+  const parser = filterType.value.trim();
+  const role = filterRole.value.trim();
+  if (documentId) {
+    filters.document_id = documentId;
+  }
+  if (parser) {
+    filters.parser = parser;
+  }
+  if (role) {
+    filters.access_roles = role;
+  }
+  return filters;
+}
+
+function renderActiveFilters(filters) {
+  const entries = Object.entries(filters).map(([key, value]) => `${key}:${value}`);
+  activeFilters.textContent = entries.length ? entries.join(" · ") : "No filters";
+  activeFilters.className = `pill ${entries.length ? "" : "muted"}`.trim();
+}
+
 function queryBody() {
-  return {
+  const filters = selectedFilters();
+  renderActiveFilters(filters);
+  const body = {
     query: queryInput.value.trim(),
     workspace_id: workspaceId,
     session_id: sessionId,
     retrieval_mode: retrievalMode.value,
     top_k: Number(topK.value),
+  };
+  if (Object.keys(filters).length) {
+    body.metadata_filters = filters;
+  }
+  return {
+    ...body,
   };
 }
 
@@ -348,8 +383,12 @@ document.querySelectorAll("[data-auth-preset]").forEach((button) => {
   button.addEventListener("click", () => applyAuthPreset(button.dataset.authPreset));
 });
 
+filterDocument.addEventListener("input", () => renderActiveFilters(selectedFilters()));
+filterType.addEventListener("change", () => renderActiveFilters(selectedFilters()));
+filterRole.addEventListener("input", () => renderActiveFilters(selectedFilters()));
 form.addEventListener("submit", askQuestion);
 uploadForm.addEventListener("submit", uploadDocument);
+renderActiveFilters(selectedFilters());
 checkHealth();
 refreshMetrics();
 refreshEvaluation();

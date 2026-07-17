@@ -77,6 +77,31 @@
                 <span>Ask</span>
               </button>
             </div>
+            <section class="filter-strip" aria-label="metadata filters">
+              <label>
+                <span>Document</span>
+                <input id="filterDocument" name="filter_document" type="text" placeholder="document_id">
+              </label>
+              <label>
+                <span>Type</span>
+                <select id="filterType" name="filter_type">
+                  <option value="">Any</option>
+                  <option value="pdf">PDF</option>
+                  <option value="docx">DOCX</option>
+                  <option value="pptx">PPTX</option>
+                  <option value="markdown">Markdown</option>
+                  <option value="txt">Text</option>
+                  <option value="html">HTML</option>
+                  <option value="csv">CSV</option>
+                  <option value="pdf-ocr">OCR PDF</option>
+                </select>
+              </label>
+              <label>
+                <span>Role</span>
+                <input id="filterRole" name="filter_role" type="text" placeholder="public">
+              </label>
+              <span id="activeFilters" class="pill muted">No filters</span>
+            </section>
           </form>
 
           <form id="uploadForm" class="upload-form">
