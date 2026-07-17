@@ -1,5 +1,9 @@
+import csv
 import re
+import zipfile
+from html.parser import HTMLParser
 from pathlib import Path
+from xml.etree import ElementTree
 
 from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader
@@ -13,6 +17,21 @@ DEFAULT_CHUNK_TOKENS = 700
 DEFAULT_CHUNK_OVERLAP_TOKENS = 100
 
 TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]")
+SUPPORTED_DOCUMENT_SUFFIXES = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".csv", ".docx", ".pptx"}
+
+
+class TextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+
+    def handle_data(self, data):
+        text = data.strip()
+        if text:
+            self.parts.append(text)
+
+    def text(self) -> str:
+        return "\n".join(self.parts)
 
 
 def tokenize(text):
@@ -38,6 +57,100 @@ def load_pdf(file_path=DEFAULT_PDF_PATH):
     file_path = Path(file_path).expanduser().resolve()
     loader = PyPDFLoader(str(file_path))
     return loader.load()
+
+
+def _document_metadata(file_path: Path, page: int = 0, section: str | None = None) -> dict:
+    metadata = {
+        "source": str(file_path),
+        "page": page,
+        "document_id": file_path.stem,
+        "parser": file_path.suffix.lower().lstrip(".") or "text",
+    }
+    if section:
+        metadata["section"] = section
+    return metadata
+
+
+def load_plain_text_document(file_path: str | Path):
+    file_path = Path(file_path).expanduser().resolve()
+    return [Document(page_content=file_path.read_text(encoding="utf-8"), metadata=_document_metadata(file_path))]
+
+
+def load_html_document(file_path: str | Path):
+    file_path = Path(file_path).expanduser().resolve()
+    parser = TextExtractor()
+    parser.feed(file_path.read_text(encoding="utf-8"))
+    return [Document(page_content=parser.text(), metadata=_document_metadata(file_path))]
+
+
+def load_csv_document(file_path: str | Path):
+    file_path = Path(file_path).expanduser().resolve()
+    docs = []
+    with file_path.open(newline="", encoding="utf-8") as handle:
+        reader = csv.reader(handle)
+        for index, row in enumerate(reader):
+            text = " | ".join(cell.strip() for cell in row if cell.strip())
+            if text:
+                docs.append(Document(page_content=text, metadata=_document_metadata(file_path, page=index, section="row")))
+    return docs
+
+
+def _zip_xml_text(file_path: Path, members: list[str]) -> list[str]:
+    texts = []
+    try:
+        with zipfile.ZipFile(file_path) as archive:
+            for member in members:
+                try:
+                    root = ElementTree.fromstring(archive.read(member))
+                except KeyError:
+                    continue
+                parts = [node.text.strip() for node in root.iter() if node.text and node.text.strip()]
+                if parts:
+                    texts.append(" ".join(parts))
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"invalid {file_path.suffix.lower()} file: {file_path.name}") from exc
+    return texts
+
+
+def load_docx_document(file_path: str | Path):
+    file_path = Path(file_path).expanduser().resolve()
+    texts = _zip_xml_text(file_path, ["word/document.xml"])
+    return [
+        Document(page_content=text, metadata=_document_metadata(file_path, page=index, section="body"))
+        for index, text in enumerate(texts)
+    ]
+
+
+def load_pptx_document(file_path: str | Path):
+    file_path = Path(file_path).expanduser().resolve()
+    try:
+        with zipfile.ZipFile(file_path) as archive:
+            members = sorted(member for member in archive.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", member))
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"invalid {file_path.suffix.lower()} file: {file_path.name}") from exc
+    texts = _zip_xml_text(file_path, members)
+    return [
+        Document(page_content=text, metadata=_document_metadata(file_path, page=index, section=f"slide-{index + 1}"))
+        for index, text in enumerate(texts)
+    ]
+
+
+def load_document(file_path: str | Path):
+    file_path = Path(file_path).expanduser().resolve()
+    suffix = file_path.suffix.lower()
+    if suffix == ".pdf":
+        return load_pdf(file_path)
+    if suffix in {".md", ".markdown", ".txt"}:
+        return load_plain_text_document(file_path)
+    if suffix in {".html", ".htm"}:
+        return load_html_document(file_path)
+    if suffix == ".csv":
+        return load_csv_document(file_path)
+    if suffix == ".docx":
+        return load_docx_document(file_path)
+    if suffix == ".pptx":
+        return load_pptx_document(file_path)
+    raise ValueError(f"unsupported file type: {suffix or '<none>'}")
 
 
 def create_token_splitter(
@@ -124,17 +237,7 @@ def chunk_pdf(
 
 
 def load_text_document(file_path):
-    file_path = Path(file_path).expanduser().resolve()
-    return [
-        Document(
-            page_content=file_path.read_text(encoding="utf-8"),
-            metadata={
-                "source": str(file_path),
-                "page": 0,
-                "document_id": file_path.stem,
-            },
-        )
-    ]
+    return load_plain_text_document(file_path)
 
 
 def chunk_text_file(
@@ -144,6 +247,21 @@ def chunk_text_file(
     document_version: str = "v1",
 ):
     docs = load_text_document(file_path)
+    return chunk_documents(
+        docs,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        document_version=document_version,
+    )
+
+
+def chunk_file(
+    file_path,
+    chunk_size=DEFAULT_CHUNK_TOKENS,
+    chunk_overlap=DEFAULT_CHUNK_OVERLAP_TOKENS,
+    document_version: str = "v1",
+):
+    docs = load_document(file_path)
     return chunk_documents(
         docs,
         chunk_size=chunk_size,

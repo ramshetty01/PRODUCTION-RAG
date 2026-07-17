@@ -210,7 +210,7 @@ def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypat
 
     unsupported = client.post(
         "/upload",
-        files={"file": ("spreadsheet.csv", b"question,answer", "text/csv")},
+        files={"file": ("spreadsheet.xlsx", b"question,answer", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
     empty = client.post(
         "/upload",
@@ -218,7 +218,7 @@ def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypat
     )
 
     assert unsupported.status_code == 400
-    assert unsupported.json()["detail"] == "supported upload types: PDF, Markdown, or text"
+    assert unsupported.json()["detail"] == "supported upload types: PDF, DOCX, PPTX, Markdown, HTML, CSV, or text"
     assert empty.status_code == 400
     assert empty.json()["detail"] == "uploaded file is empty"
 

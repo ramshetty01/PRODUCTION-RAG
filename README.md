@@ -77,7 +77,7 @@ Check health:
 curl http://localhost:8000/health
 ```
 
-Upload and index a new PDF, Markdown, or text document:
+Upload and index a new PDF, DOCX, PPTX, Markdown, HTML, CSV, or text document:
 
 ```bash
 curl -X POST http://localhost:8000/upload \
@@ -86,6 +86,21 @@ curl -X POST http://localhost:8000/upload \
 
 The local demo at `http://localhost:8000/demo` includes the same upload flow
 and clears the query cache after a successful index.
+
+Supported upload parsers:
+
+| Type | Extensions | Notes |
+| --- | --- | --- |
+| PDF | `.pdf` | Uses page-aware PDF extraction. |
+| Word | `.docx` | Extracts body text from the OOXML package. |
+| PowerPoint | `.pptx` | Extracts slide text from the OOXML package. |
+| Text/Markdown | `.txt`, `.md`, `.markdown` | Reads UTF-8 text directly. |
+| HTML | `.html`, `.htm` | Strips tags and indexes visible text. |
+| CSV | `.csv` | Indexes non-empty rows with row metadata. |
+
+Unsupported binary formats such as legacy `.doc`, `.ppt`, spreadsheets, images,
+and archives are rejected with a parser error instead of silently indexing
+empty content.
 
 ## Generated State
 
