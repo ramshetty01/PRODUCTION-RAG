@@ -39,13 +39,13 @@ from src.rag.observability import (
 )
 from src.rag.performance import build_query_cache, estimate_llm_cost
 from src.rag.reranking import build_reranker
-from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode
+from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode, select_retrieval_strategy
 from src.rag.security import build_rate_limiter, validate_path, validate_query
 from src.rag.vector_store import build_vector_db, count_records, delete_records_by_metadata
 
 
 SETTINGS = load_settings()
-SUPPORTED_RETRIEVAL_MODES = {"semantic", "exact", "hybrid", "sparse", "reranked"}
+SUPPORTED_RETRIEVAL_MODES = {"auto", "semantic", "exact", "hybrid", "sparse", "reranked"}
 AUTH_CONTEXTS = parse_api_keys(SETTINGS.api_keys)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEMO_DIR = PROJECT_ROOT / "demo"
@@ -278,6 +278,9 @@ def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_c
     mode = request.retrieval_mode.lower()
     if mode not in SUPPORTED_RETRIEVAL_MODES:
         raise ValueError(f"Unsupported retrieval mode: {request.retrieval_mode}")
+    strategy_reason = "explicit retrieval mode"
+    if mode == "auto":
+        mode, strategy_reason = select_retrieval_strategy(query)
     documents = []
     if mode in {"exact", "hybrid", "sparse", "reranked"}:
         documents = _candidate_documents(vectorstore, query, request.top_k)
@@ -288,7 +291,7 @@ def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_c
             SETTINGS.reranker_model,
             SETTINGS.reranker_allow_fallback,
         )
-    return mode, retrieve_by_mode(
+    return mode, strategy_reason, retrieve_by_mode(
         query,
         mode,
         vectorstore=vectorstore,
@@ -356,7 +359,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                     "rag.top_k": request.top_k,
                 },
             ):
-                retrieval_mode, chunks = _retrieve_for_request(
+                retrieval_mode, retrieval_reason, chunks = _retrieve_for_request(
                     retrieval_query,
                     request,
                     vectorstore,
@@ -391,6 +394,8 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
             "citations": response["citations"],
             "retrieval": {
                 "mode": retrieval_mode,
+                "requested_mode": requested_mode,
+                "strategy_reason": retrieval_reason,
                 "top_k": request.top_k,
                 "returned_chunks": len(chunks),
                 "chunk_ids": [chunk.metadata.get("chunk_id") for chunk in chunks],

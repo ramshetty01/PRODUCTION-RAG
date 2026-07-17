@@ -161,6 +161,7 @@ def test_demo_frontend_assets_are_served():
     assert "filterDocument" in page.text
     assert "filterType" in page.text
     assert "filterRole" in page.text
+    assert '<option value="auto">Auto</option>' in page.text
     assert "metadata_filters" in script.text
     assert "activeFilters" in script.text
     assert "/documents?workspace_id=" in script.text
@@ -391,6 +392,7 @@ def test_query_endpoint_isolates_results_by_workspace(monkeypatch):
 
 def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     routes.QUERY_CACHE.values.clear()
+    routes.CONVERSATION_MEMORY.clear()
     monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     client = TestClient(routes.create_app())
 
@@ -403,6 +405,8 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["citations"][0]["id"] == "docs:p2:c3"
     assert body["retrieval"] == {
         "mode": "semantic",
+        "requested_mode": "semantic",
+        "strategy_reason": "explicit retrieval mode",
         "top_k": 2,
         "returned_chunks": 1,
         "chunk_ids": ["docs:p2:c3"],
@@ -650,6 +654,42 @@ def test_query_endpoint_filters_by_parser_and_access_role(monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["retrieval"]["chunk_ids"] == ["payroll:p0:c0"]
+
+
+def test_query_endpoint_auto_selects_sparse_for_table_lookup(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(llm_provider="extractive"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: MetadataVectorStore())
+    monkeypatch.setattr(
+        routes,
+        "generate_answer",
+        lambda query, chunks: {
+            "answer": "CSV vendor control row. [controls:p0:c0]",
+            "citations": [
+                {
+                    "id": "controls:p0:c0",
+                    "source": "controls",
+                    "source_path": "/tmp/controls.csv",
+                    "page": 0,
+                    "chunk_index": 0,
+                    "quote": "CSV vendor control row.",
+                }
+            ],
+            "token_usage": {"prompt_tokens": 4, "answer_tokens": 4},
+        },
+    )
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/query",
+        json={"query": "Who owns the evidence row?", "top_k": 2, "retrieval_mode": "auto"},
+    )
+
+    assert response.status_code == 200
+    retrieval = response.json()["retrieval"]
+    assert retrieval["requested_mode"] == "auto"
+    assert retrieval["mode"] == "sparse"
+    assert retrieval["strategy_reason"] == "keyword/table lookup query"
 
 
 def test_query_endpoint_derives_admin_role_from_api_key(monkeypatch):

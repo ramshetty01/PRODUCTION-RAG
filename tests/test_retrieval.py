@@ -15,6 +15,7 @@ from src.rag.retrieval import (
     retrieve_hybrid_chunks,
     retrieve_reranked_chunks,
     retrieve_sparse_chunks,
+    select_retrieval_strategy,
 )
 
 
@@ -63,6 +64,14 @@ def test_retrieve_chunks_uses_vector_similarity_and_top_k():
 
     assert results == [docs[0]]
     assert vectorstore.calls == [{"query": "What is a job?", "k": 1}]
+
+
+def test_select_retrieval_strategy_routes_by_query_shape():
+    assert select_retrieval_strategy('"SOC 2 report"')[0] == "exact"
+    assert select_retrieval_strategy("control_id ABC-123")[0] == "exact"
+    assert select_retrieval_strategy("Who owns the onboarding evidence row?")[0] == "sparse"
+    assert select_retrieval_strategy("Explain how incident response evolves across lifecycle responsibilities")[0] == "hybrid"
+    assert select_retrieval_strategy("What is a runner?")[0] == "semantic"
 
 
 def test_table_row_chunks_retrieve_table_specific_answers():

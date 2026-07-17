@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 from src.rag.advanced.exact_search import exact_search
 from src.rag.advanced.sparse_embeddings import sparse_search
@@ -13,6 +14,8 @@ from src.rag.vector_store import load_vector_db
 
 
 DEFAULT_TOP_K = 4
+IDENTIFIER_PATTERN = re.compile(r"\b[A-Z]{2,}[-_]\d+|\b[a-z]+[-_][a-z0-9_-]+\b|\b\d{3,}\b")
+KEYWORD_LOOKUP_TERMS = {"id", "policy", "control", "owner", "date", "row", "table", "evidence"}
 
 
 def user_can_access(chunk, user_roles: set[str] | None = None) -> bool:
@@ -48,6 +51,21 @@ def filter_authorized_chunks(chunks, metadata_filters: dict | None = None, user_
         for chunk in chunks
         if user_can_access(chunk, roles) and metadata_matches(chunk, metadata_filters)
     ]
+
+
+def select_retrieval_strategy(query: str) -> tuple[str, str]:
+    query = " ".join(query.split())
+    if '"' in query or "'" in query:
+        return "exact", "quoted phrase query"
+    if IDENTIFIER_PATTERN.search(query):
+        return "exact", "identifier-like query"
+    lowered = query.lower()
+    tokens = set(re.findall(r"\b[a-z0-9_]+\b", lowered))
+    if tokens & KEYWORD_LOOKUP_TERMS:
+        return "sparse", "keyword/table lookup query"
+    if len(query.split()) >= 8:
+        return "hybrid", "long conceptual query"
+    return "semantic", "short conceptual query"
 
 
 def load_vectorstore(
