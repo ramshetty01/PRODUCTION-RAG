@@ -30,12 +30,16 @@ def citation_for_chunk(chunk) -> dict:
     citation_id = citation_id_for_chunk(chunk)
     source = str(chunk.metadata.get("source", ""))
     page = chunk.metadata.get("page")
+    source_name = _source_name(source)
+    page_label = f"page {page}" if page is not None else "page unknown"
     return {
         "id": citation_id,
-        "source": _source_name(source),
+        "label": f"{source_name}, {page_label}",
+        "source": source_name,
         "source_path": source,
         "page": page,
         "chunk_index": chunk.metadata.get("chunk_index"),
+        "snippet": chunk.page_content,
         "quote": chunk.page_content,
     }
 
@@ -75,3 +79,26 @@ def attach_citations(answer: str, chunks, cited_ids: list[str] | None = None) ->
         "answer": answer,
         "citations": select_citations(chunks, cited_ids=cited_ids),
     }
+
+
+def productize_citations(citations: list[dict]) -> list[dict]:
+    clean = []
+    for citation in citations:
+        source = citation.get("source") or _source_name(str(citation.get("source_path", "")))
+        page = citation.get("page")
+        page_label = f"page {page}" if page is not None else "page unknown"
+        clean.append(
+            {
+                **citation,
+                "label": citation.get("label") or f"{source}, {page_label}",
+                "snippet": citation.get("snippet") or citation.get("quote", ""),
+            }
+        )
+    return clean
+
+
+def productize_answer_citations(answer: str, citations: list[dict]) -> str:
+    clean_answer = answer
+    for index, citation in enumerate(citations, start=1):
+        clean_answer = clean_answer.replace(f"[{citation['id']}]", f"[{index}]")
+    return clean_answer
