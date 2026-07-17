@@ -184,6 +184,21 @@ def test_demo_frontend_assets_are_served():
     assert font.headers["content-type"].startswith("font/woff2")
 
 
+def test_admin_console_assets_are_served():
+    client = TestClient(routes.create_app())
+
+    page = client.get("/admin")
+    script = client.get("/demo/admin.js")
+    styles = client.get("/demo/styles.css")
+
+    assert page.status_code == 200
+    assert "Admin Console" in page.text
+    assert "adminCredential" in page.text
+    assert "/admin/status" in script.text
+    assert "data-action=\"reindex\"" in script.text
+    assert ".admin-table" in styles.text
+
+
 def test_source_open_endpoint_serves_safe_files(tmp_path, monkeypatch):
     source = tmp_path / "data" / "uploads" / "sample.txt"
     source.parent.mkdir(parents=True)
@@ -341,16 +356,30 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
             chunk_overlap=2,
         ),
     )
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
     monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
     monkeypatch.setattr(routes, "build_vector_db", fake_build_vector_db)
     client = TestClient(routes.create_app())
 
     listed = client.get("/documents", params={"workspace_id": "workspace-a"})
-    reindexed = client.post("/documents/policy/reindex", params={"workspace_id": "workspace-a"})
-    deleted = client.delete("/documents/policy", params={"workspace_id": "workspace-a"})
+    blocked = client.post("/documents/policy/reindex", params={"workspace_id": "workspace-a"})
+    status = client.get("/admin/status", headers={"X-API-Key": "admin-key"}, params={"workspace_id": "workspace-a"})
+    reindexed = client.post(
+        "/documents/policy/reindex",
+        headers={"X-API-Key": "admin-key"},
+        params={"workspace_id": "workspace-a"},
+    )
+    deleted = client.delete(
+        "/documents/policy",
+        headers={"X-API-Key": "admin-key"},
+        params={"workspace_id": "workspace-a"},
+    )
 
     assert listed.status_code == 200
     assert listed.json()["documents"][0]["document_id"] == "policy"
+    assert blocked.status_code == 401
+    assert status.status_code == 200
+    assert status.json()["index"]["document_count"] == 1
     assert reindexed.status_code == 200
     assert reindexed.json()["document_version"] == "v2"
     assert built["chunks"][0].metadata["workspace_id"] == "workspace-a"

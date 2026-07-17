@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Production RAG Admin</title>
+    <link rel="stylesheet" href="/demo/styles.css">
+  </head>
+  <body>
+    <main class="shell admin-shell">
+      <section class="app-window" aria-label="Production RAG admin console">
+        <div class="product-bar">
+          <strong>Admin Console</strong>
+          <div class="status-strip">
+            <span id="adminHealth">Health</span>
+            <span id="adminIndex">Index</span>
+            <span id="adminFailures">Failures</span>
+          </div>
+        </div>
+        <section class="glass-stage admin-stage">
+          <div class="stage-copy">
+            <p class="eyebrow">Operations</p>
+            <h1>Manage local RAG</h1>
+            <p class="subtitle">Inspect documents, index health, failed jobs, and run admin actions.</p>
+          </div>
+          <section class="auth-strip">
+            <label>
+              <span>Admin API key</span>
+              <input id="adminCredential" type="password" autocomplete="off" placeholder="Paste admin key">
+            </label>
+            <button id="adminRefresh" type="button">Refresh</button>
+            <span id="adminStatus" class="auth-badge">Not loaded</span>
+          </section>
+          <div id="adminDocuments" class="admin-table"></div>
+        </section>
+      </section>
+    </main>
+    <script src="/demo/admin.js"></script>
+  </body>
+</html>
