@@ -154,6 +154,7 @@ class UploadIngestResponse(BaseModel):
     document_id: str
     document_version: str
     workspace_id: str = "default"
+    access_roles: list[str] = Field(default_factory=lambda: ["public"])
     status: str
     chunks_created: int
     vector_records: int | None
@@ -271,6 +272,18 @@ def _safe_session_id(session_id: str | None) -> str | None:
             detail="session_id may only contain letters, numbers, hyphen, and underscore",
         )
     return value
+
+
+def _safe_access_roles(access_roles: str | None) -> list[str]:
+    if access_roles is None or access_roles.strip() == "":
+        return ["public"]
+    roles = [role.strip() for role in re.split(r"[,|]", access_roles) if role.strip()]
+    if not roles:
+        return ["public"]
+    for role in roles:
+        if len(role) > 64 or not re.match(r"^[A-Za-z0-9_-]+$", role):
+            raise HTTPException(status_code=400, detail="access_roles may only contain role names separated by comma or pipe")
+    return sorted(set(roles))
 
 
 def _effective_metadata_filters(request: QueryRequest) -> dict:
@@ -570,8 +583,13 @@ def ingest(request: IngestRequest):
 
 
 @router.post("/upload", response_model=UploadIngestResponse)
-async def upload_document(file: UploadFile = File(...), workspace_id: str | None = Form(default=None)):
+async def upload_document(
+    file: UploadFile = File(...),
+    workspace_id: str | None = Form(default=None),
+    access_roles: str | None = Form(default=None),
+):
     safe_workspace_id = _safe_workspace_id(workspace_id)
+    safe_access_roles = _safe_access_roles(access_roles)
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
         raise HTTPException(status_code=400, detail="supported upload types: PDF, DOCX, PPTX, Markdown, HTML, CSV, or text")
@@ -595,10 +613,13 @@ async def upload_document(file: UploadFile = File(...), workspace_id: str | None
         if safe_workspace_id:
             for chunk in chunks:
                 chunk.metadata["workspace_id"] = safe_workspace_id
+        for chunk in chunks:
+            chunk.metadata["access_roles"] = safe_access_roles
         vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
         vector_records = count_records(vectorstore)
         record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
         manifest["documents"][decision.document_id]["filename"] = safe_name
+        manifest["documents"][decision.document_id]["access_roles"] = safe_access_roles
         if safe_workspace_id:
             manifest["documents"][decision.document_id]["workspace_id"] = safe_workspace_id
         save_manifest(manifest, manifest_path)
@@ -609,6 +630,7 @@ async def upload_document(file: UploadFile = File(...), workspace_id: str | None
             document_id=decision.document_id,
             document_version=decision.document_version,
             workspace_id=safe_workspace_id or "default",
+            access_roles=safe_access_roles,
             status="indexed",
             chunks_created=len(chunks),
             vector_records=vector_records,
@@ -699,9 +721,12 @@ def reindex_document(
     document_version = f"v{current_version + 1}"
     chunks = _chunks_for_path(source_path, document_version)
     workspace = record.get("workspace_id")
+    access_roles = record.get("access_roles") or ["public"]
     if workspace:
         for chunk in chunks:
             chunk.metadata["workspace_id"] = workspace
+    for chunk in chunks:
+        chunk.metadata["access_roles"] = access_roles
 
     vectorstore = build_vector_db(
         chunks,
@@ -714,6 +739,7 @@ def reindex_document(
     manifest["documents"][document_id]["document_version"] = document_version
     manifest["documents"][document_id]["filename"] = record.get("filename") or source_path.name
     manifest["documents"][document_id]["workspace_id"] = workspace
+    manifest["documents"][document_id]["access_roles"] = access_roles
     save_manifest(manifest, manifest_path)
     _clear_query_cache()
     return UploadIngestResponse(
@@ -722,6 +748,7 @@ def reindex_document(
         document_id=document_id,
         document_version=document_version,
         workspace_id=workspace or "default",
+        access_roles=access_roles,
         status="indexed",
         chunks_created=len(chunks),
         vector_records=vector_records,

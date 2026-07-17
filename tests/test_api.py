@@ -258,7 +258,7 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
 
     response = client.post(
         "/upload",
-        data={"workspace_id": "workspace-a"},
+        data={"workspace_id": "workspace-a", "access_roles": "admin,finance"},
         files={"file": ("policy.md", b"# Policy\n\nVendors require SOC 2 evidence.", "text/markdown")},
     )
 
@@ -268,6 +268,7 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
     assert body["document_id"] == "policy"
     assert body["document_version"] == "v1"
     assert body["workspace_id"] == "workspace-a"
+    assert body["access_roles"] == ["admin", "finance"]
     assert body["status"] == "indexed"
     assert body["chunks_created"] == len(built["chunks"])
     assert body["vector_records"] == len(built["chunks"])
@@ -275,7 +276,10 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
     assert built["persist_directory"] == tmp_path / "chroma_db"
     assert built["backend"] == "chroma"
     assert built["chunks"][0].metadata["workspace_id"] == "workspace-a"
-    assert (tmp_path / "data" / "processed" / "ingestion_manifest.json").exists()
+    assert built["chunks"][0].metadata["access_roles"] == ["admin", "finance"]
+    manifest = (tmp_path / "data" / "processed" / "ingestion_manifest.json")
+    assert manifest.exists()
+    assert '"access_roles": [' in manifest.read_text(encoding="utf-8")
 
 
 def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypatch):

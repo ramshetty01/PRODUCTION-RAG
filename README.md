@@ -91,6 +91,9 @@ The demo supports dev-public, API-key, and bearer-token auth modes. Query and
 upload requests attach the selected credential, and the browser stores only the
 selected auth mode in local storage while keeping the credential in session
 storage.
+Uploaded documents are tagged with `access_roles` metadata. Public uploads use
+`public`; admin-key uploads use `admin`; retrieval filters chunks against the
+authenticated roles on every query.
 
 Supported upload parsers:
 

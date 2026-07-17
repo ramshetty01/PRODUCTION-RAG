@@ -384,6 +384,7 @@ async function uploadDocument(event) {
   const body = new FormData();
   body.append("file", file);
   body.append("workspace_id", workspaceId);
+  body.append("access_roles", authType.value === "api_key" && credential.value.trim() === "admin-key" ? "admin" : "public");
 
   try {
     const response = await fetch("/upload", {
