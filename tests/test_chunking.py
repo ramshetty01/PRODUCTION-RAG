@@ -11,6 +11,9 @@ from src.rag.chunking import (
     chunk_text_file,
     chunk_token_summary,
     count_tokens,
+    is_low_text_pdf_page,
+    load_pdf,
+    ocr_pdf_pages,
 )
 
 
@@ -132,3 +135,42 @@ def test_chunk_file_reports_invalid_office_package(tmp_path):
         assert "invalid .docx file" in str(exc)
     else:
         raise AssertionError("expected invalid office package to fail")
+
+
+def test_low_text_pdf_pages_use_ocr_fallback(monkeypatch, tmp_path):
+    import src.rag.chunking as chunking
+
+    source = tmp_path / "scan.pdf"
+    source.write_bytes(b"%PDF-1.4")
+    docs = [Document(page_content="", metadata={"source": str(source), "page": 0})]
+    monkeypatch.setattr(chunking.PyPDFLoader, "load", lambda self: docs)
+    monkeypatch.setattr(chunking, "ocr_pdf_pages", lambda path, pages: {0: "OCR extracted vendor policy"})
+
+    loaded = load_pdf(source)
+
+    assert is_low_text_pdf_page(docs[0]) is True
+    assert loaded[0].page_content == "OCR extracted vendor policy"
+    assert loaded[0].metadata["page"] == 0
+    assert loaded[0].metadata["parser"] == "pdf-ocr"
+    assert loaded[0].metadata["ocr"] is True
+
+
+def test_ocr_pdf_pages_reports_missing_optional_dependencies(monkeypatch, tmp_path):
+    source = tmp_path / "scan.pdf"
+    source.write_bytes(b"%PDF-1.4")
+
+    original_import = __import__
+
+    def fake_import(name, *args, **kwargs):
+        if name in {"pdf2image", "pytesseract"}:
+            raise ImportError(name)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    try:
+        ocr_pdf_pages(source, [0])
+    except RuntimeError as exc:
+        assert "OCR fallback requires optional local dependencies" in str(exc)
+    else:
+        raise AssertionError("expected missing OCR dependencies to fail clearly")

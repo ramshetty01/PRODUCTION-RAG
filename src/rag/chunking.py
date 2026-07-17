@@ -15,6 +15,7 @@ DEFAULT_DB_PATH = PROJECT_ROOT / "chroma_db"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 DEFAULT_CHUNK_TOKENS = 700
 DEFAULT_CHUNK_OVERLAP_TOKENS = 100
+MIN_PDF_PAGE_TEXT_TOKENS = 8
 
 TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]")
 SUPPORTED_DOCUMENT_SUFFIXES = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".csv", ".docx", ".pptx"}
@@ -56,7 +57,66 @@ def chunk_token_summary(chunks) -> dict:
 def load_pdf(file_path=DEFAULT_PDF_PATH):
     file_path = Path(file_path).expanduser().resolve()
     loader = PyPDFLoader(str(file_path))
-    return loader.load()
+    docs = loader.load()
+    return _apply_pdf_ocr_fallback(file_path, docs)
+
+
+def is_low_text_pdf_page(doc: Document, min_tokens: int = MIN_PDF_PAGE_TEXT_TOKENS) -> bool:
+    return count_tokens(doc.page_content) < min_tokens
+
+
+def _apply_pdf_ocr_fallback(file_path: Path, docs: list[Document]) -> list[Document]:
+    low_text_pages = [doc for doc in docs if is_low_text_pdf_page(doc)]
+    if not low_text_pages:
+        return docs
+
+    ocr_pages = ocr_pdf_pages(file_path, [int(doc.metadata.get("page") or 0) for doc in low_text_pages])
+    if not ocr_pages:
+        return docs
+
+    by_page = {int(page): text for page, text in ocr_pages.items() if text.strip()}
+    output = []
+    for doc in docs:
+        page = int(doc.metadata.get("page") or 0)
+        text = by_page.get(page)
+        if text:
+            output.append(
+                Document(
+                    page_content=text,
+                    metadata={
+                        **doc.metadata,
+                        "source": str(file_path),
+                        "page": page,
+                        "parser": "pdf-ocr",
+                        "ocr": True,
+                    },
+                )
+            )
+        else:
+            output.append(doc)
+    return output
+
+
+def ocr_pdf_pages(file_path: str | Path, pages: list[int]) -> dict[int, str]:
+    if not pages:
+        return {}
+    try:
+        import pdf2image
+        import pytesseract
+    except ImportError as exc:
+        raise RuntimeError(
+            "OCR fallback requires optional local dependencies: install pytesseract, pdf2image, "
+            "Tesseract OCR, and Poppler."
+        ) from exc
+
+    file_path = Path(file_path).expanduser().resolve()
+    extracted = {}
+    for page in pages:
+        images = pdf2image.convert_from_path(str(file_path), first_page=page + 1, last_page=page + 1)
+        text = "\n".join(pytesseract.image_to_string(image).strip() for image in images)
+        if text.strip():
+            extracted[page] = text
+    return extracted
 
 
 def _document_metadata(file_path: Path, page: int = 0, section: str | None = None) -> dict:
