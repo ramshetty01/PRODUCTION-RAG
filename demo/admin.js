@@ -5,6 +5,8 @@ const health = document.querySelector("#adminHealth");
 const index = document.querySelector("#adminIndex");
 const failures = document.querySelector("#adminFailures");
 const documents = document.querySelector("#adminDocuments");
+const auditEvents = document.querySelector("#auditEvents");
+const auditCsv = document.querySelector("#auditCsv");
 
 function headers() {
   return credential.value.trim() ? {"X-API-Key": credential.value.trim()} : {};
@@ -37,10 +39,15 @@ async function adminRequest(path, options = {}) {
 async function load() {
   statusText.textContent = "Loading";
   const payload = await adminRequest("/admin/status");
+  const audit = await adminRequest("/audit");
   health.textContent = `API ${payload.health.api}`;
   index.textContent = `${payload.index.document_count} docs`;
   failures.textContent = `${payload.failed_jobs.length} failures`;
   documents.innerHTML = payload.documents.length ? payload.documents.map(row).join("") : "<p>No documents indexed.</p>";
+  auditCsv.href = "/audit?format=csv";
+  auditEvents.innerHTML = audit.events.length
+    ? audit.events.map((event) => `<div class="admin-row"><div><strong>${event.user}</strong><span>${event.query}</span></div><span>${event.latency_ms || 0} ms</span></div>`).join("")
+    : "<p>No audit events.</p>";
   statusText.textContent = "Loaded";
 }
 

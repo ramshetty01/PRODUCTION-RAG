@@ -198,7 +198,9 @@ def test_admin_console_assets_are_served():
     assert page.status_code == 200
     assert "Admin Console" in page.text
     assert "adminCredential" in page.text
+    assert "auditEvents" in page.text
     assert "/admin/status" in script.text
+    assert "/audit" in script.text
     assert "data-action=\"reindex\"" in script.text
     assert ".admin-table" in styles.text
 
@@ -214,6 +216,28 @@ def test_source_open_endpoint_serves_safe_files(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.text == "source passage"
+
+
+def test_audit_endpoint_exports_json_and_csv(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    audit_path = tmp_path / "logs" / "audit.jsonl"
+    audit_path.parent.mkdir(parents=True)
+    audit_path.write_text(
+        '{"timestamp":"t","user":"api-key:admin","query":"q","retrieval_ids":["c1"],"answer":"a","citations":["c1"],"model":"extractive","latency_ms":3}\n',
+        encoding="utf-8",
+    )
+    client = TestClient(routes.create_app())
+
+    json_response = client.get("/audit", headers={"X-API-Key": "admin-key"})
+    csv_response = client.get("/audit", headers={"X-API-Key": "admin-key"}, params={"format": "csv"})
+    blocked = client.get("/audit")
+
+    assert json_response.status_code == 200
+    assert json_response.json()["events"][0]["retrieval_ids"] == ["c1"]
+    assert csv_response.status_code == 200
+    assert "retrieval_ids" in csv_response.text
+    assert blocked.status_code == 401
 
 
 def test_evaluation_endpoint_returns_dashboard_metrics():
@@ -488,6 +512,9 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["trace"]["latency_ms"] >= 0
     assert body["trace"]["token_usage"]["answer_tokens"] > 0
     assert body["cached"] is False
+    audit = (routes.PROJECT_ROOT / "logs" / "audit.jsonl").read_text(encoding="utf-8")
+    assert "What does a runner do?" in audit
+    assert "docs:p2:c3" in audit
 
 
 def test_query_endpoint_warns_on_failed_runtime_quality_gate(monkeypatch):
