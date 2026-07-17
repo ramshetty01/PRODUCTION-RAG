@@ -14,6 +14,7 @@ const askButton = document.querySelector("#askButton");
 const uploadInput = document.querySelector("#documentUpload");
 const uploadButton = document.querySelector("#uploadButton");
 const uploadStatus = document.querySelector("#uploadStatus");
+const indexStatus = document.querySelector("#indexStatus");
 const apiStatus = document.querySelector("#apiStatus");
 const answerText = document.querySelector("#answerText");
 const requestId = document.querySelector("#requestId");
@@ -45,6 +46,8 @@ localStorage.setItem("rag_session_id", sessionId);
 authType.value = savedAuthType;
 credential.value = savedCredential;
 let lastPayload = null;
+let indexReady = false;
+let chatBusy = false;
 
 const scenarios = {
   vendor: {
@@ -68,6 +71,18 @@ function text(value) {
 function setStatus(label, variant = "") {
   apiStatus.textContent = label;
   apiStatus.className = `metric-value ${variant}`.trim();
+}
+
+function setChatBusy(value) {
+  chatBusy = value;
+  askButton.disabled = chatBusy || !indexReady;
+}
+
+function renderIndexReadiness(payload) {
+  indexReady = Boolean(payload.ready);
+  indexStatus.textContent = payload.message || "Index status unavailable";
+  indexStatus.className = `pill ${payload.ready ? "" : payload.status === "failed" ? "error" : "muted"}`.trim();
+  askButton.disabled = chatBusy || !indexReady;
 }
 
 function saveAuthState() {
@@ -336,9 +351,28 @@ async function refreshDocuments() {
   return response.ok ? response.json() : {documents: []};
 }
 
+async function refreshIndexReadiness() {
+  try {
+    const response = await fetch(`/index-status?workspace_id=${encodeURIComponent(workspaceId)}`);
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || `HTTP ${response.status}`);
+    }
+    renderIndexReadiness(payload);
+    return payload;
+  } catch (error) {
+    renderIndexReadiness({ready: false, status: "failed", message: error.message});
+    return null;
+  }
+}
+
 async function askQuestion(event) {
   event.preventDefault();
-  askButton.disabled = true;
+  if (!indexReady) {
+    renderError("Upload and index a corpus before asking.");
+    return;
+  }
+  setChatBusy(true);
   askButton.lastChild.textContent = " Asking";
   requestId.className = "pill muted";
   setStatus("Running");
@@ -363,7 +397,7 @@ async function askQuestion(event) {
     renderError(error.message);
     setStatus("Error", "error");
   } finally {
-    askButton.disabled = false;
+    setChatBusy(false);
     askButton.lastChild.textContent = " Ask";
     refreshMetrics();
   }
@@ -387,6 +421,7 @@ async function uploadDocument(event) {
   uploadButton.disabled = true;
   uploadButton.textContent = "Indexing";
   uploadStatus.textContent = file.name;
+  renderIndexReadiness({ready: false, status: "indexing", message: "Indexing corpus before chat is enabled."});
   setStatus("Indexing");
 
   const body = new FormData();
@@ -396,7 +431,7 @@ async function uploadDocument(event) {
   body.append("background", "true");
 
   try {
-    askButton.disabled = true;
+    setChatBusy(true);
     const response = await fetch("/upload", {
       method: "POST",
       headers: authHeaders(),
@@ -409,6 +444,7 @@ async function uploadDocument(event) {
     const finalPayload = payload.job_id ? await pollIngestionJob(payload.job_id) : payload;
     uploadStatus.textContent = `${finalPayload.chunks_created} chunks indexed`;
     await refreshDocuments();
+    await refreshIndexReadiness();
     metricStatus.textContent = "Indexed";
     setStatus("Online");
   } catch (error) {
@@ -417,7 +453,7 @@ async function uploadDocument(event) {
     setStatus("Error", "error");
   } finally {
     uploadButton.disabled = false;
-    askButton.disabled = false;
+    setChatBusy(false);
     uploadButton.textContent = "Index";
     refreshMetrics();
   }
@@ -431,6 +467,11 @@ async function pollIngestionJob(jobId) {
       throw new Error(payload.detail || `HTTP ${response.status}`);
     }
     uploadStatus.textContent = `${payload.status} - ${payload.progress}%`;
+    renderIndexReadiness({
+      ready: false,
+      status: payload.status === "failed" ? "failed" : "indexing",
+      message: payload.status === "failed" ? "Indexing failed. Upload the corpus again." : "Indexing corpus before chat is enabled.",
+    });
     if (payload.status === "indexed") {
       return payload;
     }
@@ -495,5 +536,6 @@ feedbackForm.addEventListener("click", (event) => {
 });
 renderActiveFilters(selectedFilters());
 checkHealth();
+refreshIndexReadiness();
 refreshMetrics();
 refreshEvaluation();
