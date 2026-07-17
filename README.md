@@ -178,6 +178,11 @@ curl -X POST http://localhost:8000/query \
   -d '{"query":"What does a runner do?","retrieval_mode":"hybrid","top_k":4}'
 ```
 
+Multi-turn chat is scoped by `workspace_id`, `session_id`, and auth context.
+Recent user turns are used only to rewrite follow-up retrieval queries; previous
+assistant claims are not treated as evidence and the final answer must still cite
+retrieved chunks. Bound server-side memory with `RAG_CONVERSATION_MAX_TURNS`.
+
 ## Portfolio Demo
 
 This repo demonstrates a production-style RAG lifecycle over an enterprise

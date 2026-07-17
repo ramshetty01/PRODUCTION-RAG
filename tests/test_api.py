@@ -38,6 +38,14 @@ class FakeVectorStore:
         ][:k]
 
 
+class RecordingVectorStore(FakeVectorStore):
+    queries = []
+
+    def similarity_search(self, query, k):
+        self.__class__.queries.append(query)
+        return super().similarity_search(query, k)
+
+
 class RecordingTelemetry:
     def __init__(self):
         self.spans = []
@@ -115,7 +123,9 @@ def test_demo_frontend_assets_are_served():
     assert "/query" in script.text
     assert "/upload" in script.text
     assert "rag_workspace_id" in script.text
+    assert "rag_session_id" in script.text
     assert "workspace_id" in script.text
+    assert "session_id" in script.text
     assert "/documents?workspace_id=" in script.text
     assert "/query/stream" in script.text
     assert "/evaluation" in script.text
@@ -362,6 +372,8 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
         "auth_subject": "dev-public",
         "auth_roles": ["public"],
         "tenant_id": "default",
+        "query": "What does a runner do?",
+        "conversation_turns": 0,
     }
     assert body["trace"]["request_id"] == body["request_id"]
     assert body["trace"]["retrieved_chunk_ids"] == ["docs:p2:c3"]
@@ -369,6 +381,30 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["trace"]["latency_ms"] >= 0
     assert body["trace"]["token_usage"]["answer_tokens"] > 0
     assert body["cached"] is False
+
+
+def test_query_endpoint_uses_session_history_for_follow_up_retrieval(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    routes.CONVERSATION_MEMORY.clear()
+    RecordingVectorStore.queries.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: RecordingVectorStore())
+    client = TestClient(routes.create_app())
+
+    first = client.post(
+        "/query",
+        json={"query": "What does a runner do?", "session_id": "session-a", "workspace_id": "workspace-a", "top_k": 2},
+    )
+    second = client.post(
+        "/query",
+        json={"query": "What about its schedule?", "session_id": "session-a", "workspace_id": "workspace-a", "top_k": 2},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert RecordingVectorStore.queries[0] == "What does a runner do?"
+    assert RecordingVectorStore.queries[1] == "What does a runner do? What about its schedule?"
+    assert "A runner executes jobs." not in RecordingVectorStore.queries[1]
+    assert second.json()["retrieval"]["conversation_turns"] == 1
 
 
 def test_query_stream_endpoint_emits_tokens_and_final_payload(monkeypatch):

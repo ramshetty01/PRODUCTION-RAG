@@ -28,6 +28,7 @@ class RuntimeSettings:
     top_k: int = 4
     retrieval_mode: str = "semantic"
     log_level: str = "INFO"
+    conversation_max_turns: int = 6
     llm_provider: str = "extractive"
     llm_model: str = ""
     llm_api_key: str = ""
@@ -103,6 +104,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         top_k=_setting_int(dotenv_values, "RAG_TOP_K", 4),
         retrieval_mode=_setting_value(dotenv_values, "RAG_RETRIEVAL_MODE", "semantic"),
         log_level=_setting_value(dotenv_values, "RAG_LOG_LEVEL", "INFO"),
+        conversation_max_turns=_setting_int(dotenv_values, "RAG_CONVERSATION_MAX_TURNS", 6),
         llm_provider=_setting_value(dotenv_values, "RAG_LLM_PROVIDER", "extractive"),
         llm_model=_setting_value(dotenv_values, "RAG_LLM_MODEL", ""),
         llm_api_key=_setting_value(dotenv_values, "RAG_LLM_API_KEY", ""),
