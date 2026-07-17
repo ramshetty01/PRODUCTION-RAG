@@ -91,7 +91,7 @@ Supported upload parsers:
 
 | Type | Extensions | Notes |
 | --- | --- | --- |
-| PDF | `.pdf` | Uses page-aware PDF extraction. |
+| PDF | `.pdf` | Uses page-aware PDF extraction and optional OCR for low-text pages. |
 | Word | `.docx` | Extracts body text from the OOXML package. |
 | PowerPoint | `.pptx` | Extracts slide text from the OOXML package. |
 | Text/Markdown | `.txt`, `.md`, `.markdown` | Reads UTF-8 text directly. |
@@ -101,6 +101,20 @@ Supported upload parsers:
 Unsupported binary formats such as legacy `.doc`, `.ppt`, spreadsheets, images,
 and archives are rejected with a parser error instead of silently indexing
 empty content.
+
+Scanned or image-heavy PDFs can use local OCR when these optional dependencies
+are installed:
+
+```bash
+python -m pip install pytesseract pdf2image
+# macOS example:
+brew install tesseract poppler
+```
+
+When a PDF page has very little extracted text, the parser attempts OCR for that
+page and preserves the original page number for citations. If the OCR
+dependencies are missing, ingestion fails with a clear setup error rather than
+indexing empty scanned pages.
 
 ## Generated State
 
