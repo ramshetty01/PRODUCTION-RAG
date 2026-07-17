@@ -314,7 +314,12 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
     safe_workspace_id = _safe_workspace_id(request.workspace_id)
     conversation_turns = CONVERSATION_MEMORY.get(safe_session_id, safe_workspace_id, auth_context.cache_scope())
     retrieval_query = build_contextual_query(safe_query, conversation_turns)
-    event = TraceEvent(request_id=request_id, query=safe_query)
+    event = TraceEvent(
+        request_id=request_id,
+        query=safe_query,
+        original_query=safe_query,
+        rewritten_query=retrieval_query,
+    )
     cache_filters = {
         **_effective_metadata_filters(request),
         "_retrieval_mode": requested_mode,
@@ -392,6 +397,8 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                 "auth_roles": sorted(auth_context.roles),
                 "tenant_id": auth_context.tenant_id,
                 "query": retrieval_query,
+                "original_query": safe_query,
+                "rewritten_query": retrieval_query,
                 "conversation_turns": len(conversation_turns),
             },
             "trace": event.to_log_dict(),

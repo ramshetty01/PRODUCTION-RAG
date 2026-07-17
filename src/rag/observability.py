@@ -23,6 +23,8 @@ def new_request_id() -> str:
 class TraceEvent:
     request_id: str
     query: str
+    original_query: str | None = None
+    rewritten_query: str | None = None
     retrieved_chunk_ids: list[str] = field(default_factory=list)
     retrieval_scores: list[float] = field(default_factory=list)
     answer: str | None = None
@@ -35,6 +37,8 @@ class TraceEvent:
         return {
             "request_id": self.request_id,
             "query": self.query,
+            "original_query": self.original_query or self.query,
+            "rewritten_query": self.rewritten_query or self.query,
             "retrieved_chunk_ids": self.retrieved_chunk_ids,
             "retrieval_scores": self.retrieval_scores,
             "answer": self.answer,
