@@ -209,9 +209,11 @@ def test_admin_console_assets_are_served():
     assert page.status_code == 200
     assert "Admin Console" in page.text
     assert "adminCredential" in page.text
+    assert "observabilityDashboard" in page.text
     assert "auditEvents" in page.text
     assert "feedbackEvents" in page.text
     assert "/admin/status" in script.text
+    assert "/observability/dashboard?window_minutes=60" in script.text
     assert "/audit" in script.text
     assert "/feedback/events" in script.text
     assert "data-action=\"reindex\"" in script.text
@@ -1291,3 +1293,108 @@ def test_feedback_and_monitoring_endpoints(tmp_path, monkeypatch):
     assert events.json()["events"][0]["request_id"] == "req-1"
     assert export.status_code == 200
     assert "request_id" in export.text
+
+
+def test_observability_dashboard_aggregates_operator_metrics(tmp_path, monkeypatch):
+    now = "2026-07-18T00:00:00+00:00"
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "audit.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "timestamp": now,
+                        "user": "api-key:admin",
+                        "query": "policy",
+                        "retrieval_ids": ["c1", "c2"],
+                        "answer": "answer",
+                        "citations": ["c1"],
+                        "model": "extractive",
+                        "latency_ms": 20,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "timestamp": now,
+                        "user": "api-key:admin",
+                        "query": "vendor",
+                        "retrieval_ids": ["c3"],
+                        "answer": "answer",
+                        "citations": ["c3"],
+                        "model": "extractive",
+                        "latency_ms": 40,
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (logs / "feedback.jsonl").write_text(
+        json.dumps(
+            {
+                "created_at": now,
+                "request_id": "req-1",
+                "query": "policy",
+                "answer": "answer",
+                "helpful": True,
+                "citations": ["c1"],
+                "latency_ms": 20,
+                "note": None,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "policy": {
+                        "document_id": "policy",
+                        "document_version": "v1",
+                        "filename": "policy.md",
+                        "workspace_id": "workspace-a",
+                        "status": "indexed",
+                        "chunk_count": 2,
+                        "source_path": str(tmp_path / "policy.md"),
+                        "ingested_at": now,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    routes.INGESTION_JOBS.clear()
+    routes.INGESTION_JOBS["job-1"] = {"job_id": "job-1", "workspace_id": "workspace-a", "status": "failed", "progress": 100}
+    routes.METRICS = routes.MetricsRegistry()
+    routes.METRICS.record_request(200, 20)
+    routes.METRICS.record_request(500, 40)
+    monkeypatch.setattr(routes, "MODEL_ERROR_COUNT", 2)
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest), vector_db_path=str(tmp_path / "chroma_db")))
+    client = TestClient(routes.create_app())
+
+    response = client.get(
+        "/observability/dashboard",
+        headers={"X-API-Key": "admin-key"},
+        params={"workspace_id": "workspace-a", "window_minutes": 120},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["window"]["minutes"] == 120
+    assert body["metrics"]["request_count"] == 2
+    assert body["metrics"]["status_counts"] == {"200": 1, "500": 1}
+    assert body["request_latency"]["avg_ms"] == 30.0
+    assert body["retrieval"]["total_chunks"] == 3
+    assert body["feedback"]["helpful_rate"] == 1.0
+    assert body["ingestion"]["failed_jobs"] == 1
+    assert body["model"]["errors"] == 2
+    assert body["index_health"]["status"] == "failed"
+    assert body["recent_events"]["audit"][0]["query"] == "vendor"
+    routes.INGESTION_JOBS.clear()

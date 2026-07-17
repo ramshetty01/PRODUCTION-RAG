@@ -5,6 +5,7 @@ import re
 import shutil
 import threading
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
@@ -227,6 +228,18 @@ class AdminStatusResponse(BaseModel):
     failed_jobs: list[dict]
 
 
+class ObservabilityDashboardResponse(BaseModel):
+    window: dict
+    metrics: dict
+    request_latency: dict
+    retrieval: dict
+    ingestion: dict
+    model: dict
+    index_health: dict
+    feedback: dict
+    recent_events: dict
+
+
 class AuditResponse(BaseModel):
     events: list[dict]
 
@@ -239,6 +252,7 @@ OTEL = configure_opentelemetry(SETTINGS)
 CONVERSATION_MEMORY = ConversationMemoryStore(max_turns=SETTINGS.conversation_max_turns)
 INGESTION_JOBS: dict[str, dict] = {}
 INGESTION_JOB_LOCK = threading.Lock()
+MODEL_ERROR_COUNT = 0
 
 
 def _auth_context(
@@ -302,6 +316,7 @@ def _product_error_detail(
 
 
 def _classify_query_error(exc: Exception, request_id: str, event: TraceEvent) -> dict:
+    global MODEL_ERROR_COUNT
     text = str(exc).lower()
     event.error = type(exc).__name__
     trace = event.to_log_dict()
@@ -322,6 +337,7 @@ def _classify_query_error(exc: Exception, request_id: str, event: TraceEvent) ->
             trace=trace,
         )
     if any(term in text for term in ["llm", "model", "openrouter", "completion", "chat"]):
+        MODEL_ERROR_COUNT += 1
         return _product_error_detail(
             "answer_generation_unavailable",
             "The answer model did not respond.",
@@ -421,6 +437,80 @@ def _index_readiness(workspace_id: str | None = None) -> IndexReadinessResponse:
         ready=False,
         message="Upload and index a corpus before asking.",
         document_count=0,
+    )
+
+
+def _parse_event_time(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _filter_window(events: list, key: str, since: datetime) -> list:
+    filtered = []
+    for event in events:
+        value = getattr(event, key, None) if not isinstance(event, dict) else event.get(key)
+        parsed = _parse_event_time(value)
+        if parsed is None or parsed >= since:
+            filtered.append(event)
+    return filtered
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, int(round((len(ordered) - 1) * percentile)))
+    return round(ordered[index], 3)
+
+
+def _observability_dashboard(window_minutes: int, workspace_id: str | None = None) -> ObservabilityDashboardResponse:
+    safe_window_minutes = max(1, min(window_minutes, 24 * 60))
+    since = datetime.now(UTC) - timedelta(minutes=safe_window_minutes)
+    audit_events = _filter_window(load_audit_events(_safe_api_path(DEFAULT_AUDIT_LOG), limit=1000), "timestamp", since)
+    feedback_events = _filter_window(load_feedback(_safe_api_path(DEFAULT_FEEDBACK_LOG)), "created_at", since)
+    latency_values = [float(event.get("latency_ms")) for event in audit_events if event.get("latency_ms") is not None]
+    retrieval_counts = [len(event.get("retrieval_ids") or []) for event in audit_events]
+    documents = _document_records(workspace_id)
+    jobs = _ingestion_jobs_for_workspace(_safe_workspace_id(workspace_id))
+    failed_jobs = [job for job in jobs if job.get("status") == "failed"]
+    pending_jobs = [job for job in jobs if job.get("status") in {"queued", "parsing", "chunking", "embedding"}]
+    failed_documents = [document for document in documents if document.get("status") not in {"indexed", "skipped"}]
+    request_count = METRICS.request_count
+    return ObservabilityDashboardResponse(
+        window={"minutes": safe_window_minutes, "since": since.isoformat()},
+        metrics={
+            "request_count": request_count,
+            "status_counts": {str(code): count for code, count in METRICS.status_counts.items()},
+            "avg_latency_ms": round(METRICS.latency_ms_total / request_count, 3) if request_count else 0.0,
+        },
+        request_latency={
+            "count": len(latency_values),
+            "avg_ms": round(sum(latency_values) / len(latency_values), 3) if latency_values else 0.0,
+            "p95_ms": _percentile(latency_values, 0.95),
+            "max_ms": max(latency_values) if latency_values else 0.0,
+        },
+        retrieval={
+            "requests": len(retrieval_counts),
+            "total_chunks": sum(retrieval_counts),
+            "avg_chunks": round(sum(retrieval_counts) / len(retrieval_counts), 3) if retrieval_counts else 0.0,
+        },
+        ingestion={
+            "pending_jobs": len(pending_jobs),
+            "failed_jobs": len(failed_jobs),
+            "failed_documents": len(failed_documents),
+        },
+        model={"errors": MODEL_ERROR_COUNT},
+        index_health=_index_readiness(workspace_id).model_dump(),
+        feedback=monitoring_metrics(feedback_events),
+        recent_events={
+            "audit": audit_events[:10],
+            "feedback": [event.__dict__ for event in list(reversed(feedback_events))[:10]],
+            "failed_jobs": failed_jobs[:10],
+        },
     )
 
 
@@ -1164,6 +1254,15 @@ def feedback_events(
 @router.get("/monitoring", response_model=MonitoringResponse)
 def monitoring(feedback_path: str = str(DEFAULT_FEEDBACK_LOG)):
     return MonitoringResponse(metrics=monitoring_metrics(load_feedback(_safe_api_path(feedback_path))))
+
+
+@router.get("/observability/dashboard", response_model=ObservabilityDashboardResponse)
+def observability_dashboard(
+    window_minutes: int = 60,
+    workspace_id: str | None = None,
+    auth_context: AuthContext = Depends(_admin_context),
+):
+    return _observability_dashboard(window_minutes, workspace_id)
 
 
 @router.get("/audit", response_model=AuditResponse)
