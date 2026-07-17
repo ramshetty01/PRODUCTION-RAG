@@ -176,6 +176,9 @@ def test_demo_frontend_assets_are_served():
     assert "citation-toggle" in script.text
     assert "citation-detail" in script.text
     assert "Open source" in script.text
+    assert "feedbackForm" in page.text
+    assert "/feedback" in script.text
+    assert "lastPayload.request_id" in script.text
     assert ".workspace" in styles.text
     assert ".auth-strip" in styles.text
     assert ".upload-form" in styles.text
@@ -199,8 +202,10 @@ def test_admin_console_assets_are_served():
     assert "Admin Console" in page.text
     assert "adminCredential" in page.text
     assert "auditEvents" in page.text
+    assert "feedbackEvents" in page.text
     assert "/admin/status" in script.text
     assert "/audit" in script.text
+    assert "/feedback/events" in script.text
     assert "data-action=\"reindex\"" in script.text
     assert ".admin-table" in styles.text
 
@@ -975,6 +980,7 @@ def test_feedback_endpoint_rejects_path_traversal():
 
 def test_feedback_and_monitoring_endpoints(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
     client = TestClient(routes.create_app())
     feedback_path = tmp_path / "feedback.jsonl"
 
@@ -991,8 +997,17 @@ def test_feedback_and_monitoring_endpoints(tmp_path, monkeypatch):
         },
     )
     metrics = client.get("/monitoring", params={"feedback_path": str(feedback_path)})
+    default_feedback_path = tmp_path / "logs" / "feedback.jsonl"
+    default_feedback_path.parent.mkdir(parents=True)
+    default_feedback_path.write_text(feedback_path.read_text(encoding="utf-8"), encoding="utf-8")
+    events = client.get("/feedback/events", headers={"X-API-Key": "admin-key"})
+    export = client.get("/feedback/events", headers={"X-API-Key": "admin-key"}, params={"format": "csv"})
 
     assert response.status_code == 200
     assert response.json() == {"status": "recorded", "request_id": "req-1"}
     assert metrics.status_code == 200
     assert metrics.json()["metrics"]["helpful_rate"] == 1.0
+    assert events.status_code == 200
+    assert events.json()["events"][0]["request_id"] == "req-1"
+    assert export.status_code == 200
+    assert "request_id" in export.text

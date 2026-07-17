@@ -128,6 +128,10 @@ class FeedbackResponse(BaseModel):
     request_id: str
 
 
+class FeedbackEventsResponse(BaseModel):
+    events: list[dict]
+
+
 class MonitoringResponse(BaseModel):
     metrics: dict
 
@@ -811,6 +815,21 @@ def feedback(request: FeedbackRequest):
     )
     append_feedback(event, _safe_api_path(request.feedback_path))
     return FeedbackResponse(status="recorded", request_id=request.request_id)
+
+
+@router.get("/feedback/events", response_model=FeedbackEventsResponse)
+def feedback_events(
+    format: str = "json",
+    auth_context: AuthContext = Depends(_admin_context),
+):
+    events = [event.__dict__ for event in load_feedback(_safe_api_path(DEFAULT_FEEDBACK_LOG))]
+    if format == "csv":
+        fields = ["created_at", "request_id", "query", "answer", "helpful", "citations", "latency_ms", "note"]
+        rows = [",".join(fields)]
+        for event in events:
+            rows.append(",".join(str(event.get(field, "")).replace(",", " ") for field in fields))
+        return Response("\n".join(rows) + "\n", media_type="text/csv")
+    return FeedbackEventsResponse(events=list(reversed(events)))
 
 
 @router.get("/monitoring", response_model=MonitoringResponse)
