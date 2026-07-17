@@ -105,8 +105,9 @@ def test_chunk_file_supports_html_csv_docx_and_pptx(tmp_path):
 
     assert {".pdf", ".docx", ".pptx", ".html", ".csv", ".txt", ".md", ".markdown"} <= SUPPORTED_DOCUMENT_SUFFIXES
     assert "Vendor Policy" in html_chunks[0].page_content
-    assert csv_chunks[0].metadata["section"] == "row"
-    assert any("SOC 2" in chunk.page_content for chunk in csv_chunks)
+    assert csv_chunks[0].metadata["section"] == "table-row"
+    assert csv_chunks[0].metadata["table_headers"] == ["control", "evidence"]
+    assert any("control : vendor | evidence : SOC 2" in chunk.page_content for chunk in csv_chunks)
     assert "DOCX vendor evidence" in docx_chunks[0].page_content
     assert docx_chunks[0].metadata["parser"] == "docx"
     assert "PPTX audit packet" in pptx_chunks[0].page_content
@@ -174,3 +175,31 @@ def test_ocr_pdf_pages_reports_missing_optional_dependencies(monkeypatch, tmp_pa
         assert "OCR fallback requires optional local dependencies" in str(exc)
     else:
         raise AssertionError("expected missing OCR dependencies to fail clearly")
+
+
+def test_markdown_table_rows_preserve_headers_and_context(tmp_path):
+    source = tmp_path / "controls.md"
+    source.write_text(
+        "\n".join(
+            [
+                "# Vendor Controls",
+                "",
+                "| Control | Owner | Evidence |",
+                "| --- | --- | --- |",
+                "| Onboarding | Security | SOC 2 report |",
+                "| Renewal | Legal | Signed DPA |",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    chunks = chunk_file(source, chunk_size=24, chunk_overlap=2)
+    table_chunks = [chunk for chunk in chunks if chunk.metadata.get("section") == "table-row"]
+
+    assert len(table_chunks) == 2
+    assert table_chunks[0].page_content == (
+        "Vendor Controls | Control : Onboarding | Owner : Security | Evidence : SOC 2 report"
+    )
+    assert table_chunks[0].metadata["table_headers"] == ["Control", "Owner", "Evidence"]
+    assert table_chunks[0].metadata["table_context"] == "Vendor Controls"
+    assert table_chunks[1].metadata["row_index"] == 1

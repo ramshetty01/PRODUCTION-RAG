@@ -96,7 +96,7 @@ Supported upload parsers:
 | PowerPoint | `.pptx` | Extracts slide text from the OOXML package. |
 | Text/Markdown | `.txt`, `.md`, `.markdown` | Reads UTF-8 text directly. |
 | HTML | `.html`, `.htm` | Strips tags and indexes visible text. |
-| CSV | `.csv` | Indexes non-empty rows with row metadata. |
+| CSV | `.csv` | Indexes non-empty rows with header-aware table metadata. |
 
 Unsupported binary formats such as legacy `.doc`, `.ppt`, spreadsheets, images,
 and archives are rejected with a parser error instead of silently indexing
@@ -115,6 +115,11 @@ When a PDF page has very little extracted text, the parser attempts OCR for that
 page and preserves the original page number for citations. If the OCR
 dependencies are missing, ingestion fails with a clear setup error rather than
 indexing empty scanned pages.
+
+Table-like content is normalized into row-level chunks where practical. CSV rows
+retain their header names, and Markdown pipe tables preserve the nearest heading
+as table context so questions about owners, controls, dates, or evidence retrieve
+the relevant row instead of a detached cell.
 
 ## Generated State
 

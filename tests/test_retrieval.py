@@ -65,6 +65,23 @@ def test_retrieve_chunks_uses_vector_similarity_and_top_k():
     assert vectorstore.calls == [{"query": "What is a job?", "k": 1}]
 
 
+def test_table_row_chunks_retrieve_table_specific_answers():
+    table_row = make_doc(
+        "Vendor Controls | Control: Onboarding | Owner: Security | Evidence: SOC 2 report",
+        "controls:p0:c0",
+        section="table-row",
+        table_headers=["Control", "Owner", "Evidence"],
+    )
+    unrelated = make_doc("Vendor Controls | Control: Renewal | Owner: Legal | Evidence: Signed DPA", "controls:p1:c0")
+    vectorstore = FakeVectorStore([table_row, unrelated])
+
+    results = retrieve_chunks("Who owns onboarding control evidence?", vectorstore, top_k=2)
+
+    assert results[0].metadata["section"] == "table-row"
+    assert results[0].metadata["table_headers"] == ["Control", "Owner", "Evidence"]
+    assert "Owner: Security" in results[0].page_content
+
+
 def test_retrieval_filters_metadata_and_permissions():
     public = make_doc("public workflow", "docs:p0:c0", document_id="public-doc")
     private = make_doc(
