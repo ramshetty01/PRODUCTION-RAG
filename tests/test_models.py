@@ -1,7 +1,7 @@
 import pytest
 
 from src.rag.config import RuntimeSettings
-from src.rag.llm.client import ExtractiveLLMClient, OpenAILLMClient, OpenRouterLLMClient
+from src.rag.llm.client import ExtractiveLLMClient, LocalSynthesisLLMClient, OpenAILLMClient, OpenRouterLLMClient
 from src.rag.models import get_model_provider
 
 
@@ -27,6 +27,13 @@ def test_model_provider_uses_configured_embedding_model(monkeypatch):
     embeddings = get_model_provider(settings).embeddings()
 
     assert embeddings.model_name == "custom-embedding-model"
+
+
+def test_local_model_provider_returns_synthesis_llm():
+    settings = RuntimeSettings(llm_provider="local")
+    llm = get_model_provider(settings).llm()
+
+    assert isinstance(llm, LocalSynthesisLLMClient)
 
 
 def test_model_provider_returns_openrouter_llm_client():

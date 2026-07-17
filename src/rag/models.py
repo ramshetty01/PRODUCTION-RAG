@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.rag.config import RuntimeSettings, load_settings
-from src.rag.llm.client import ExtractiveLLMClient, LLMClient, OpenAILLMClient, OpenRouterLLMClient
+from src.rag.llm.client import ExtractiveLLMClient, LLMClient, LocalSynthesisLLMClient, OpenAILLMClient, OpenRouterLLMClient
 
 
 @dataclass(frozen=True)
@@ -25,11 +25,12 @@ class LocalModelProvider(ModelProvider):
         return HuggingFaceEmbeddings(model_name=self.settings.embedding_model)
 
     def llm(self) -> LLMClient:
-        return ExtractiveLLMClient()
+        return LocalSynthesisLLMClient()
 
 
 class ExtractiveModelProvider(LocalModelProvider):
-    pass
+    def llm(self) -> LLMClient:
+        return ExtractiveLLMClient()
 
 
 class OpenRouterModelProvider(LocalModelProvider):

@@ -88,6 +88,46 @@ class OpenAILLMClient(OpenAICompatibleLLMClient):
 
 
 @dataclass
+class LocalSynthesisLLMClient(LLMClient):
+    fallback: str = "The answer is not available in the retrieved context."
+    max_evidence_chunks: int = 3
+
+    def generate(self, prompt: str) -> str:
+        evidence = self._evidence_blocks(prompt)
+        if not evidence:
+            return self.fallback
+
+        sentences = []
+        for citation_id, content in evidence[: self.max_evidence_chunks]:
+            sentence = self._first_sentence(content)
+            if sentence:
+                sentences.append(f"{sentence} [{citation_id}]")
+
+        if not sentences:
+            return self.fallback
+        if len(sentences) == 1:
+            return sentences[0]
+        return "\n\n".join(sentences)
+
+    @staticmethod
+    def _evidence_blocks(prompt: str) -> list[tuple[str, str]]:
+        pattern = re.compile(
+            r"\[([^\]]+)\]\nsource: .+?\npage: .+?\n(.+?)(?=\n\n\[[^\]]+\]\nsource:|\n</retrieved_context>|\Z)",
+            re.S,
+        )
+        return [(match.group(1), " ".join(match.group(2).split())) for match in pattern.finditer(prompt)]
+
+    @staticmethod
+    def _first_sentence(content: str) -> str:
+        if not content.strip():
+            return ""
+        sentence = re.split(r"(?<=[.!?])\s+", content.strip(), maxsplit=1)[0].strip()
+        if sentence and sentence[-1] not in ".!?":
+            sentence = f"{sentence}."
+        return sentence
+
+
+@dataclass
 class ExtractiveLLMClient(LLMClient):
     fallback: str = "The answer is not available in the retrieved context."
 
