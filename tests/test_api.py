@@ -169,15 +169,32 @@ def test_demo_frontend_assets_are_served():
     assert "/evaluation" in script.text
     assert "Authorization" in script.text
     assert "X-API-Key" in script.text
+    assert "citation-toggle" in script.text
+    assert "citation-detail" in script.text
+    assert "Open source" in script.text
     assert ".workspace" in styles.text
     assert ".auth-strip" in styles.text
     assert ".upload-form" in styles.text
+    assert ".citation-detail" in styles.text
     assert "/demo/fonts/KMR_Apparat_Light.woff2" in styles.text
     assert "https://spur.us" not in styles.text
     assert styles.headers["content-type"].startswith("text/css")
     assert script.headers["content-type"].startswith("application/javascript")
     assert font.status_code == 200
     assert font.headers["content-type"].startswith("font/woff2")
+
+
+def test_source_open_endpoint_serves_safe_files(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "sample.txt"
+    source.parent.mkdir(parents=True)
+    source.write_text("source passage", encoding="utf-8")
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    client = TestClient(routes.create_app())
+
+    response = client.get("/sources/open", params={"path": str(source)})
+
+    assert response.status_code == 200
+    assert response.text == "source passage"
 
 
 def test_evaluation_endpoint_returns_dashboard_metrics():
@@ -405,6 +422,8 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["citations"][0]["id"] == "docs:p2:c3"
     assert body["citations"][0]["label"] == "docs.pdf, page 2"
     assert body["citations"][0]["snippet"] == "A runner executes jobs."
+    assert body["citations"][0]["context"] == "A runner executes jobs."
+    assert body["citations"][0]["source_url"] == "/sources/open?path=/tmp/docs.pdf#page=3"
     assert body["quality"]["status"] == "passed"
     assert body["quality"]["citation_coverage"] == 1.0
     assert body["quality"]["evidence_support"] == 1.0

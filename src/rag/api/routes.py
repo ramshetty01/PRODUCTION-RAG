@@ -96,6 +96,8 @@ class CitationResponse(BaseModel):
     page: int | None
     chunk_index: int | None
     snippet: str
+    context: str
+    source_url: str
     quote: str
 
 
@@ -483,6 +485,14 @@ def demo_font(font_name: str):
     if font_path.suffix == ".woff2":
         return FileResponse(font_path, media_type="font/woff2")
     return FileResponse(font_path, media_type="font/ttf")
+
+
+@router.get("/sources/open", include_in_schema=False)
+def open_source(path: str):
+    source_path = _safe_api_path(path)
+    if not source_path.exists() or not source_path.is_file():
+        raise HTTPException(status_code=404, detail="source file not found")
+    return FileResponse(source_path)
 
 
 @router.post("/ingest", response_model=IngestResponse)

@@ -580,6 +580,16 @@ h3 {
   padding: 12px;
 }
 
+.citation-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
 .citation strong {
   display: block;
   margin-bottom: 7px;
@@ -588,7 +598,9 @@ h3 {
   letter-spacing: 0;
 }
 
-.citation p {
+.citation span,
+.citation p,
+.citation dd {
   display: -webkit-box;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.74);
@@ -596,6 +608,36 @@ h3 {
   letter-spacing: -0.14px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 6;
+}
+
+.citation-detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.citation-detail dl {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.citation-detail div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.citation-detail dt {
+  color: rgba(255, 255, 255, 0.48);
+  font: normal normal 400 0.72rem/1.4 var(--font-mono);
+}
+
+.citation-detail a {
+  display: inline-flex;
+  margin-top: 10px;
+  color: var(--cream);
+  font: normal normal 400 0.78rem/1.4 var(--font-mono);
 }
 
 .trace-table {
