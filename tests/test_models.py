@@ -1,7 +1,13 @@
 import pytest
 
 from src.rag.config import RuntimeSettings
-from src.rag.llm.client import ExtractiveLLMClient, LocalSynthesisLLMClient, OpenAILLMClient, OpenRouterLLMClient
+from src.rag.llm.client import (
+    ExtractiveLLMClient,
+    LocalOpenAICompatibleLLMClient,
+    LocalSynthesisLLMClient,
+    OpenAILLMClient,
+    OpenRouterLLMClient,
+)
 from src.rag.models import get_model_provider
 
 
@@ -61,6 +67,26 @@ def test_model_provider_returns_openai_compatible_llm_client():
 
     assert isinstance(llm, OpenAILLMClient)
     assert llm.model == "gpt-test"
+
+
+def test_model_provider_returns_local_openai_compatible_llm_client():
+    settings = RuntimeSettings(
+        llm_provider="local-openai",
+        llm_model="llama3.1:8b",
+        llm_endpoint="http://localhost:11434/v1/chat/completions",
+        llm_timeout_seconds=5,
+        llm_max_tokens=256,
+        llm_temperature=0.0,
+    )
+
+    llm = get_model_provider(settings).llm()
+
+    assert isinstance(llm, LocalOpenAICompatibleLLMClient)
+    assert llm.model == "llama3.1:8b"
+    assert llm.endpoint == "http://localhost:11434/v1/chat/completions"
+    assert llm.timeout_seconds == 5
+    assert llm.max_tokens == 256
+    assert llm.temperature == 0.0
 
 
 def test_openrouter_provider_requires_key_and_model():

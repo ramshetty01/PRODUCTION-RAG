@@ -12,6 +12,10 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_CHUNK_SIZE",
         "RAG_CHUNK_OVERLAP",
         "RAG_LLM_PROVIDER",
+        "RAG_LLM_ENDPOINT",
+        "RAG_LLM_TIMEOUT_SECONDS",
+        "RAG_LLM_MAX_TOKENS",
+        "RAG_LLM_TEMPERATURE",
         "RAG_RERANKER_PROVIDER",
         "RAG_API_KEYS",
         "RAG_CACHE_BACKEND",
@@ -38,6 +42,10 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.chunk_size == 700
     assert settings.chunk_overlap == 100
     assert settings.llm_provider == "extractive"
+    assert settings.llm_endpoint == ""
+    assert settings.llm_timeout_seconds == 60
+    assert settings.llm_max_tokens == 700
+    assert settings.llm_temperature == 0.1
     assert settings.reranker_provider == "lexical"
     assert settings.api_keys == ""
     assert settings.cache_backend == "memory"
@@ -66,6 +74,10 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_TOP_K=6",
                 "RAG_RETRIEVAL_MODE=hybrid",
                 "RAG_LLM_PROVIDER=openai",
+                "RAG_LLM_ENDPOINT=http://localhost:11434/v1/chat/completions",
+                "RAG_LLM_TIMEOUT_SECONDS=5",
+                "RAG_LLM_MAX_TOKENS=256",
+                "RAG_LLM_TEMPERATURE=0.0",
                 "RAG_RERANKER_PROVIDER=cross_encoder",
                 "RAG_RERANKER_MODEL=cross-encoder/test",
                 "RAG_RERANKER_ALLOW_FALLBACK=false",
@@ -97,6 +109,10 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.top_k == 6
     assert settings.retrieval_mode == "hybrid"
     assert settings.llm_provider == "openai"
+    assert settings.llm_endpoint == "http://localhost:11434/v1/chat/completions"
+    assert settings.llm_timeout_seconds == 5
+    assert settings.llm_max_tokens == 256
+    assert settings.llm_temperature == 0.0
     assert settings.reranker_provider == "cross_encoder"
     assert settings.reranker_model == "cross-encoder/test"
     assert settings.reranker_allow_fallback is False
@@ -125,6 +141,10 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_TOP_K=" in env_example
     assert "RAG_RETRIEVAL_MODE=" in env_example
     assert "RAG_LLM_PROVIDER=" in env_example
+    assert "RAG_LLM_ENDPOINT=" in env_example
+    assert "RAG_LLM_TIMEOUT_SECONDS=" in env_example
+    assert "RAG_LLM_MAX_TOKENS=" in env_example
+    assert "RAG_LLM_TEMPERATURE=" in env_example
     assert "RAG_RERANKER_PROVIDER=" in env_example
     assert "RAG_AUTH_MODE=" in env_example
     assert "RAG_API_KEYS=" in env_example

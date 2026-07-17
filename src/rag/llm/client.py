@@ -5,29 +5,36 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from urllib.parse import urljoin
 
 
 class LLMClient:
     def generate(self, prompt: str) -> str:
         raise NotImplementedError
 
+    def health_check(self) -> dict:
+        return {"status": "ok", "provider": self.__class__.__name__}
+
 
 @dataclass
 class OpenAICompatibleLLMClient(LLMClient):
-    api_key: str = field(repr=False)
     model: str
     endpoint: str
+    api_key: str = field(default="", repr=False)
     app_title: str = "Production RAG"
     app_url: str = "https://github.com/ramshetty01/PRODUCTION-RAG"
     timeout_seconds: int = 60
     max_tokens: int = 700
     temperature: float = 0.1
+    require_api_key: bool = True
 
     def __post_init__(self) -> None:
-        if not self.api_key.strip():
+        if self.require_api_key and not self.api_key.strip():
             raise ValueError("RAG_LLM_API_KEY is required for the configured LLM provider")
         if not self.model.strip():
             raise ValueError("RAG_LLM_MODEL is required for the configured LLM provider")
+        if not self.endpoint.strip():
+            raise ValueError("RAG_LLM_ENDPOINT is required for the configured LLM provider")
 
     def generate(self, prompt: str) -> str:
         payload = {
@@ -54,10 +61,51 @@ class OpenAICompatibleLLMClient(LLMClient):
         return self._parse_response(body)
 
     def _headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key.strip():
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def health_check(self) -> dict:
+        models_endpoint = self._models_endpoint()
+        request = urllib.request.Request(
+            models_endpoint,
+            headers=self._headers(),
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                response.read()
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            return {
+                "status": "error",
+                "provider": self.__class__.__name__,
+                "model": self.model,
+                "endpoint": self.endpoint,
+                "error": f"status {exc.code}: {body}",
+            }
+        except urllib.error.URLError as exc:
+            return {
+                "status": "error",
+                "provider": self.__class__.__name__,
+                "model": self.model,
+                "endpoint": self.endpoint,
+                "error": str(exc.reason),
+            }
+
         return {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
+            "status": "ok",
+            "provider": self.__class__.__name__,
+            "model": self.model,
+            "endpoint": self.endpoint,
         }
+
+    def _models_endpoint(self) -> str:
+        endpoint = self.endpoint.rstrip("/")
+        if endpoint.endswith("/chat/completions"):
+            return f"{endpoint[: -len('/chat/completions')]}/models"
+        return urljoin(f"{endpoint}/", "models")
 
     @staticmethod
     def _parse_response(body: str) -> str:
@@ -85,6 +133,12 @@ class OpenRouterLLMClient(OpenAICompatibleLLMClient):
 @dataclass
 class OpenAILLMClient(OpenAICompatibleLLMClient):
     endpoint: str = "https://api.openai.com/v1/chat/completions"
+
+
+@dataclass
+class LocalOpenAICompatibleLLMClient(OpenAICompatibleLLMClient):
+    endpoint: str = "http://localhost:11434/v1/chat/completions"
+    require_api_key: bool = False
 
 
 @dataclass

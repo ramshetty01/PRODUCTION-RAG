@@ -14,6 +14,7 @@ from src.rag.evaluation_report import build_evaluation_report
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
 from src.rag.monitoring import DEFAULT_FEEDBACK_LOG, FeedbackEvent, append_feedback, load_feedback, monitoring_metrics
+from src.rag.models import get_model_provider
 from src.rag.observability import (
     LOGGER,
     MetricsRegistry,
@@ -109,6 +110,14 @@ class FeedbackResponse(BaseModel):
 
 class MonitoringResponse(BaseModel):
     metrics: dict
+
+
+class LLMHealthResponse(BaseModel):
+    status: str
+    provider: str
+    model: str | None = None
+    endpoint: str | None = None
+    error: str | None = None
 
 
 class EvaluationResponse(BaseModel):
@@ -274,6 +283,15 @@ def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_c
 @router.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(status="ok")
+
+
+@router.get("/llm/health", response_model=LLMHealthResponse)
+def llm_health():
+    try:
+        result = get_model_provider(SETTINGS).llm().health_check()
+    except Exception as exc:
+        return LLMHealthResponse(status="error", provider=SETTINGS.llm_provider, error=str(exc))
+    return LLMHealthResponse(**result)
 
 
 @router.get("/demo", include_in_schema=False)
