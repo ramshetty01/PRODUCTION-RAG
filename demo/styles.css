@@ -645,6 +645,39 @@ h3 {
   gap: 8px;
 }
 
+.admin-stage {
+  min-height: 680px;
+}
+
+.admin-table {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 14px 0;
+}
+
+.admin-row strong,
+.admin-row span {
+  display: block;
+}
+
+.admin-row span {
+  color: rgba(255, 255, 255, 0.58);
+  font: normal normal 400 0.75rem/1.5 var(--font-mono);
+}
+
+.admin-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .trace-table div {
   display: flex;
   align-items: center;

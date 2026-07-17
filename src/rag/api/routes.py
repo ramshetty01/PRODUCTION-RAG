@@ -181,6 +181,13 @@ class DeleteDocumentResponse(BaseModel):
     vector_records_deleted: int | None = None
 
 
+class AdminStatusResponse(BaseModel):
+    health: dict
+    index: dict
+    documents: list[DocumentRecordResponse]
+    failed_jobs: list[dict]
+
+
 router = APIRouter()
 QUERY_CACHE = build_query_cache(SETTINGS.cache_backend, SETTINGS.redis_url)
 RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_url, max_requests=120, window_seconds=60)
@@ -205,6 +212,12 @@ def _auth_context(
         )
     except PermissionError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+def _admin_context(auth_context: AuthContext = Depends(_auth_context)) -> AuthContext:
+    if "admin" not in auth_context.roles:
+        raise HTTPException(status_code=403, detail="admin role required")
+    return auth_context
 
 
 def _safe_api_path(path: str | Path) -> Path:
@@ -487,6 +500,16 @@ def demo_font(font_name: str):
     return FileResponse(font_path, media_type="font/ttf")
 
 
+@router.get("/admin", include_in_schema=False)
+def admin_console():
+    return FileResponse(DEMO_DIR / "admin.html")
+
+
+@router.get("/demo/admin.js", include_in_schema=False)
+def demo_admin_app():
+    return FileResponse(DEMO_DIR / "admin.js", media_type="application/javascript")
+
+
 @router.get("/sources/open", include_in_schema=False)
 def open_source(path: str):
     source_path = _safe_api_path(path)
@@ -602,8 +625,29 @@ def list_documents(workspace_id: str | None = None):
     return DocumentListResponse(documents=[DocumentRecordResponse(**record) for record in _document_records(workspace_id)])
 
 
+@router.get("/admin/status", response_model=AdminStatusResponse)
+def admin_status(auth_context: AuthContext = Depends(_admin_context), workspace_id: str | None = None):
+    documents = [DocumentRecordResponse(**record) for record in _document_records(workspace_id)]
+    failed_jobs = [document.model_dump() for document in documents if document.status not in {"indexed", "skipped"}]
+    try:
+        vector_records = count_records(load_vectorstore(_safe_api_path(SETTINGS.vector_db_path), settings=SETTINGS))
+    except Exception:
+        vector_records = None
+    return AdminStatusResponse(
+        health={"api": "ok", "subject": auth_context.subject},
+        index={"vector_records": vector_records, "document_count": len(documents)},
+        documents=documents,
+        failed_jobs=failed_jobs,
+    )
+
+
 @router.delete("/documents/{document_id}", response_model=DeleteDocumentResponse)
-def delete_document(document_id: str, workspace_id: str | None = None, persist_dir: str | None = None):
+def delete_document(
+    document_id: str,
+    workspace_id: str | None = None,
+    persist_dir: str | None = None,
+    auth_context: AuthContext = Depends(_admin_context),
+):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     manifest_path = _document_manifest_path()
     manifest = load_manifest(manifest_path)
@@ -632,7 +676,12 @@ def delete_document(document_id: str, workspace_id: str | None = None, persist_d
 
 
 @router.post("/documents/{document_id}/reindex", response_model=UploadIngestResponse)
-def reindex_document(document_id: str, workspace_id: str | None = None, persist_dir: str | None = None):
+def reindex_document(
+    document_id: str,
+    workspace_id: str | None = None,
+    persist_dir: str | None = None,
+    auth_context: AuthContext = Depends(_admin_context),
+):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     manifest_path = _document_manifest_path()
     manifest = load_manifest(manifest_path)
