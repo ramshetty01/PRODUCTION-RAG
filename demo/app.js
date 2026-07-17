@@ -393,8 +393,10 @@ async function uploadDocument(event) {
   body.append("file", file);
   body.append("workspace_id", workspaceId);
   body.append("access_roles", authType.value === "api_key" && credential.value.trim() === "admin-key" ? "admin" : "public");
+  body.append("background", "true");
 
   try {
+    askButton.disabled = true;
     const response = await fetch("/upload", {
       method: "POST",
       headers: authHeaders(),
@@ -404,7 +406,8 @@ async function uploadDocument(event) {
     if (!response.ok) {
       throw new Error(authErrorMessage(response.status, payload) || `HTTP ${response.status}`);
     }
-    uploadStatus.textContent = `${payload.chunks_created} chunks indexed`;
+    const finalPayload = payload.job_id ? await pollIngestionJob(payload.job_id) : payload;
+    uploadStatus.textContent = `${finalPayload.chunks_created} chunks indexed`;
     await refreshDocuments();
     metricStatus.textContent = "Indexed";
     setStatus("Online");
@@ -414,8 +417,27 @@ async function uploadDocument(event) {
     setStatus("Error", "error");
   } finally {
     uploadButton.disabled = false;
+    askButton.disabled = false;
     uploadButton.textContent = "Index";
     refreshMetrics();
+  }
+}
+
+async function pollIngestionJob(jobId) {
+  for (;;) {
+    const response = await fetch(`/ingestion-jobs/${jobId}`, {headers: authHeaders()});
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || `HTTP ${response.status}`);
+    }
+    uploadStatus.textContent = `${payload.status} - ${payload.progress}%`;
+    if (payload.status === "indexed") {
+      return payload;
+    }
+    if (payload.status === "failed") {
+      throw new Error(payload.error || "Indexing failed");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 }
 

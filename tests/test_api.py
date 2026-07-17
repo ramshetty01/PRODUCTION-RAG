@@ -1,4 +1,5 @@
 import json
+import time
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -155,6 +156,9 @@ def test_demo_frontend_assets_are_served():
     assert "evalFaithfulness" in page.text
     assert "/query" in script.text
     assert "/upload" in script.text
+    assert "background" in script.text
+    assert "/ingestion-jobs/" in script.text
+    assert "pollIngestionJob" in script.text
     assert "rag_workspace_id" in script.text
     assert "rag_session_id" in script.text
     assert "workspace_id" in script.text
@@ -310,6 +314,46 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
     manifest = (tmp_path / "data" / "processed" / "ingestion_manifest.json")
     assert manifest.exists()
     assert '"access_roles": [' in manifest.read_text(encoding="utf-8")
+
+
+def test_upload_endpoint_can_queue_background_ingestion(tmp_path, monkeypatch):
+    routes.INGESTION_JOBS.clear()
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            manifest_path=str(tmp_path / "data" / "processed" / "ingestion_manifest.json"),
+            vector_db_path=str(tmp_path / "chroma_db"),
+            chunk_size=12,
+            chunk_overlap=2,
+        ),
+    )
+    monkeypatch.setattr(routes, "build_vector_db", lambda chunks, persist_directory, settings: object())
+    monkeypatch.setattr(routes, "count_records", lambda _vectorstore: 1)
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        data={"workspace_id": "workspace-a", "background": "true"},
+        files={"file": ("policy.md", b"# Policy\n\nVendors require SOC 2 evidence.", "text/markdown")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "queued"
+    assert body["job_id"]
+
+    for _ in range(20):
+        status = client.get(f"/ingestion-jobs/{body['job_id']}")
+        if status.json()["status"] == "indexed":
+            break
+        time.sleep(0.05)
+
+    assert status.status_code == 200
+    assert status.json()["status"] == "indexed"
+    assert status.json()["progress"] == 100
+    assert status.json()["chunks_created"] > 0
 
 
 def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypatch):
