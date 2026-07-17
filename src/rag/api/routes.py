@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import threading
 import time
 from pathlib import Path
 
@@ -162,9 +163,22 @@ class UploadIngestResponse(BaseModel):
     workspace_id: str = "default"
     access_roles: list[str] = Field(default_factory=lambda: ["public"])
     status: str
+    job_id: str | None = None
+    progress: int | None = None
     chunks_created: int
     vector_records: int | None
     chunk_summary: dict | None = None
+
+
+class IngestionJobResponse(BaseModel):
+    job_id: str
+    status: str
+    progress: int
+    document_id: str | None = None
+    document_version: str | None = None
+    chunks_created: int = 0
+    vector_records: int | None = None
+    error: str | None = None
 
 
 class DocumentRecordResponse(BaseModel):
@@ -214,6 +228,8 @@ RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_ur
 METRICS = MetricsRegistry()
 OTEL = configure_opentelemetry(SETTINGS)
 CONVERSATION_MEMORY = ConversationMemoryStore(max_turns=SETTINGS.conversation_max_turns)
+INGESTION_JOBS: dict[str, dict] = {}
+INGESTION_JOB_LOCK = threading.Lock()
 
 
 def _auth_context(
@@ -254,6 +270,17 @@ def _candidate_documents(vectorstore, query: str, top_k: int):
 def _clear_query_cache() -> None:
     if hasattr(QUERY_CACHE, "values"):
         QUERY_CACHE.values.clear()
+
+
+def _set_ingestion_job(job_key: str, **updates) -> None:
+    with INGESTION_JOB_LOCK:
+        INGESTION_JOBS[job_key] = {**INGESTION_JOBS.get(job_key, {}), **updates}
+
+
+def _get_ingestion_job(job_id: str) -> dict | None:
+    with INGESTION_JOB_LOCK:
+        job = INGESTION_JOBS.get(job_id)
+        return dict(job) if job else None
 
 
 def _chunks_for_path(path: Path, document_version: str):
@@ -324,6 +351,72 @@ def _document_records(workspace_id: str | None = None) -> list[dict]:
     if safe_workspace_id:
         records = [record for record in records if record.get("workspace_id") == safe_workspace_id]
     return sorted(records, key=lambda record: record.get("ingested_at") or "", reverse=True)
+
+
+def _index_uploaded_file(
+    saved_path: Path,
+    safe_name: str,
+    safe_workspace_id: str | None,
+    safe_access_roles: list[str],
+    job_id: str | None = None,
+) -> UploadIngestResponse:
+    if job_id:
+        _set_ingestion_job(job_id, status="parsing", progress=20)
+    manifest_path = _safe_api_path(SETTINGS.manifest_path)
+    persist_dir = _safe_api_path(SETTINGS.vector_db_path)
+    manifest = load_manifest(manifest_path)
+    decision = plan_document_ingestion(saved_path, manifest)
+    if job_id:
+        _set_ingestion_job(job_id, document_id=decision.document_id, document_version=decision.document_version)
+    chunks = _chunks_for_path(saved_path, decision.document_version)
+    if job_id:
+        _set_ingestion_job(job_id, status="chunking", progress=50, chunks_created=len(chunks))
+    if safe_workspace_id:
+        for chunk in chunks:
+            chunk.metadata["workspace_id"] = safe_workspace_id
+    for chunk in chunks:
+        chunk.metadata["access_roles"] = safe_access_roles
+    if job_id:
+        _set_ingestion_job(job_id, status="embedding", progress=75)
+    vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
+    vector_records = count_records(vectorstore)
+    record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
+    manifest["documents"][decision.document_id]["filename"] = safe_name
+    manifest["documents"][decision.document_id]["access_roles"] = safe_access_roles
+    if safe_workspace_id:
+        manifest["documents"][decision.document_id]["workspace_id"] = safe_workspace_id
+    save_manifest(manifest, manifest_path)
+    _clear_query_cache()
+    response = UploadIngestResponse(
+        filename=safe_name,
+        saved_path=str(saved_path),
+        document_id=decision.document_id,
+        document_version=decision.document_version,
+        workspace_id=safe_workspace_id or "default",
+        access_roles=safe_access_roles,
+        status="indexed",
+        job_id=job_id,
+        progress=100 if job_id else None,
+        chunks_created=len(chunks),
+        vector_records=vector_records,
+        chunk_summary=chunk_token_summary(chunks),
+    )
+    if job_id:
+        _set_ingestion_job(
+            job_id,
+            status="indexed",
+            progress=100,
+            chunks_created=len(chunks),
+            vector_records=vector_records,
+        )
+    return response
+
+
+def _run_ingestion_job(job_id: str, saved_path: Path, safe_name: str, workspace_id: str | None, access_roles: list[str]) -> None:
+    try:
+        _index_uploaded_file(saved_path, safe_name, workspace_id, access_roles, job_id=job_id)
+    except Exception as exc:
+        _set_ingestion_job(job_id, status="failed", progress=100, error=str(exc))
 
 
 def _purge_logs() -> int:
@@ -632,6 +725,7 @@ async def upload_document(
     file: UploadFile = File(...),
     workspace_id: str | None = Form(default=None),
     access_roles: str | None = Form(default=None),
+    background: bool = Form(default=False),
 ):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     safe_access_roles = _safe_access_roles(access_roles)
@@ -660,41 +754,42 @@ async def upload_document(
         raise HTTPException(status_code=400, detail=f"upload rejected by scanner: {exc}") from exc
 
     try:
-        manifest_path = _safe_api_path(SETTINGS.manifest_path)
-        persist_dir = _safe_api_path(SETTINGS.vector_db_path)
-        manifest = load_manifest(manifest_path)
-        decision = plan_document_ingestion(saved_path, manifest)
-        chunks = _chunks_for_path(saved_path, decision.document_version)
-        if safe_workspace_id:
-            for chunk in chunks:
-                chunk.metadata["workspace_id"] = safe_workspace_id
-        for chunk in chunks:
-            chunk.metadata["access_roles"] = safe_access_roles
-        vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
-        vector_records = count_records(vectorstore)
-        record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
-        manifest["documents"][decision.document_id]["filename"] = safe_name
-        manifest["documents"][decision.document_id]["access_roles"] = safe_access_roles
-        if safe_workspace_id:
-            manifest["documents"][decision.document_id]["workspace_id"] = safe_workspace_id
-        save_manifest(manifest, manifest_path)
-        _clear_query_cache()
-        return UploadIngestResponse(
-            filename=safe_name,
-            saved_path=str(saved_path),
-            document_id=decision.document_id,
-            document_version=decision.document_version,
-            workspace_id=safe_workspace_id or "default",
-            access_roles=safe_access_roles,
-            status="indexed",
-            chunks_created=len(chunks),
-            vector_records=vector_records,
-            chunk_summary=chunk_token_summary(chunks),
-        )
+        if background:
+            job_id = new_request_id()
+            _set_ingestion_job(job_id, job_id=job_id, status="queued", progress=0, chunks_created=0)
+            thread = threading.Thread(
+                target=_run_ingestion_job,
+                args=(job_id, saved_path, safe_name, safe_workspace_id, safe_access_roles),
+                daemon=True,
+            )
+            thread.start()
+            return UploadIngestResponse(
+                filename=safe_name,
+                saved_path=str(saved_path),
+                document_id=Path(safe_name).stem,
+                document_version="pending",
+                workspace_id=safe_workspace_id or "default",
+                access_roles=safe_access_roles,
+                status="queued",
+                job_id=job_id,
+                progress=0,
+                chunks_created=0,
+                vector_records=None,
+                chunk_summary=None,
+            )
+        return _index_uploaded_file(saved_path, safe_name, safe_workspace_id, safe_access_roles)
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/ingestion-jobs/{job_id}", response_model=IngestionJobResponse)
+def ingestion_job(job_id: str):
+    job = _get_ingestion_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="ingestion job not found")
+    return IngestionJobResponse(**job)
 
 
 @router.get("/documents", response_model=DocumentListResponse)
