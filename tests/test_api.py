@@ -143,6 +143,7 @@ def test_demo_frontend_assets_are_served():
     page = client.get("/demo")
     styles = client.get("/demo/styles.css")
     script = client.get("/demo/app.js")
+    state = client.get("/demo/state.js")
     font = client.get("/demo/fonts/KMR_Apparat_Light.woff2")
 
     assert page.status_code == 200
@@ -154,7 +155,9 @@ def test_demo_frontend_assets_are_served():
     assert "data-auth-preset=\"admin\"" in page.text
     assert "documentUpload" in page.text
     assert "indexStatus" in page.text
+    assert 'type="module" src="/demo/app.js"' in page.text
     assert "evalFaithfulness" in page.text
+    assert 'import {appState, mergeState} from "/demo/state.js";' in script.text
     assert "/query" in script.text
     assert "/upload" in script.text
     assert "/index-status?workspace_id=" in script.text
@@ -180,6 +183,8 @@ def test_demo_frontend_assets_are_served():
     assert "rag_auth_type" in script.text
     assert "sessionStorage" in script.text
     assert "authHeaders" in script.text
+    assert "appState.chat.lastPayload" in script.text
+    assert "appState.indexing.ready" in script.text
     assert "Sign in with a valid API key or bearer token." in script.text
     assert "citation-toggle" in script.text
     assert "citation-detail" in script.text
@@ -195,6 +200,15 @@ def test_demo_frontend_assets_are_served():
     assert "https://spur.us" not in styles.text
     assert styles.headers["content-type"].startswith("text/css")
     assert script.headers["content-type"].startswith("application/javascript")
+    assert state.status_code == 200
+    assert state.headers["content-type"].startswith("application/javascript")
+    assert "createInitialState" in state.text
+    assert "upload:" in state.text
+    assert "indexing:" in state.text
+    assert "chat:" in state.text
+    assert "citations:" in state.text
+    assert "auth:" in state.text
+    assert "mergeState" in state.text
     assert font.status_code == 200
     assert font.headers["content-type"].startswith("font/woff2")
 

@@ -1,3 +1,5 @@
+import {appState, mergeState} from "/demo/state.js";
+
 const form = document.querySelector("#queryForm");
 const uploadForm = document.querySelector("#uploadForm");
 const queryInput = document.querySelector("#queryInput");
@@ -45,9 +47,7 @@ localStorage.setItem("rag_workspace_id", workspaceId);
 localStorage.setItem("rag_session_id", sessionId);
 authType.value = savedAuthType;
 credential.value = savedCredential;
-let lastPayload = null;
-let indexReady = false;
-let chatBusy = false;
+mergeState({auth: {type: savedAuthType}});
 
 const scenarios = {
   vendor: {
@@ -74,20 +74,27 @@ function setStatus(label, variant = "") {
 }
 
 function setChatBusy(value) {
-  chatBusy = value;
-  askButton.disabled = chatBusy || !indexReady;
+  mergeState({chat: {busy: value}});
+  askButton.disabled = appState.chat.busy || !appState.indexing.ready;
 }
 
 function renderIndexReadiness(payload) {
-  indexReady = Boolean(payload.ready);
+  mergeState({
+    indexing: {
+      ready: Boolean(payload.ready),
+      status: payload.status || "empty",
+      message: payload.message || "Index status unavailable",
+    },
+  });
   indexStatus.textContent = payload.message || "Index status unavailable";
   indexStatus.className = `pill ${payload.ready ? "" : payload.status === "failed" ? "error" : "muted"}`.trim();
-  askButton.disabled = chatBusy || !indexReady;
+  askButton.disabled = appState.chat.busy || !appState.indexing.ready;
 }
 
 function saveAuthState() {
   localStorage.setItem("rag_auth_type", authType.value);
   sessionStorage.setItem("rag_credential", credential.value.trim());
+  mergeState({auth: {type: authType.value}});
 }
 
 function authHeaders(base = {}) {
@@ -109,6 +116,7 @@ function authErrorMessage(status, payload) {
 }
 
 function renderCitations(items) {
+  mergeState({citations: items});
   citations.innerHTML = "";
   citationCount.textContent = String(items.length);
 
@@ -150,7 +158,7 @@ function renderCitations(items) {
 }
 
 function renderResult(payload) {
-  lastPayload = payload;
+  mergeState({chat: {lastPayload: payload, error: null}});
   answerText.textContent = payload.answer || "The answer is not available in the retrieved context.";
   requestId.textContent = payload.request_id || "No request";
   cacheBadge.textContent = payload.cached ? "Cached" : "Fresh";
@@ -168,7 +176,7 @@ function renderResult(payload) {
 }
 
 function renderError(error) {
-  lastPayload = null;
+  mergeState({chat: {lastPayload: null, error}, errors: [...appState.errors, error]});
   answerText.textContent = error;
   requestId.textContent = "Request failed";
   requestId.className = "pill error";
@@ -368,7 +376,7 @@ async function refreshIndexReadiness() {
 
 async function askQuestion(event) {
   event.preventDefault();
-  if (!indexReady) {
+  if (!appState.indexing.ready) {
     renderError("Upload and index a corpus before asking.");
     return;
   }
@@ -421,6 +429,7 @@ async function uploadDocument(event) {
   uploadButton.disabled = true;
   uploadButton.textContent = "Indexing";
   uploadStatus.textContent = file.name;
+  mergeState({upload: {status: "indexing", message: file.name}});
   renderIndexReadiness({ready: false, status: "indexing", message: "Indexing corpus before chat is enabled."});
   setStatus("Indexing");
 
@@ -443,12 +452,14 @@ async function uploadDocument(event) {
     }
     const finalPayload = payload.job_id ? await pollIngestionJob(payload.job_id) : payload;
     uploadStatus.textContent = `${finalPayload.chunks_created} chunks indexed`;
+    mergeState({upload: {status: "indexed", message: uploadStatus.textContent, jobId: finalPayload.job_id || null, chunks: finalPayload.chunks_created}});
     await refreshDocuments();
     await refreshIndexReadiness();
     metricStatus.textContent = "Indexed";
     setStatus("Online");
   } catch (error) {
     uploadStatus.textContent = error.message;
+    mergeState({upload: {status: "failed", message: error.message}, errors: [...appState.errors, error.message]});
     metricStatus.textContent = "Upload error";
     setStatus("Error", "error");
   } finally {
@@ -483,6 +494,7 @@ async function pollIngestionJob(jobId) {
 }
 
 async function sendFeedback(helpful) {
+  const lastPayload = appState.chat.lastPayload;
   if (!lastPayload) {
     feedbackStatus.textContent = "Ask first";
     return;
