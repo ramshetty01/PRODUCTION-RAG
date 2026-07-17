@@ -331,6 +331,54 @@ def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypat
     assert empty.json()["detail"] == "uploaded file is empty"
 
 
+def test_upload_endpoint_sanitizes_names_limits_size_and_runs_scanner(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            manifest_path=str(tmp_path / "data" / "processed" / "ingestion_manifest.json"),
+            vector_db_path=str(tmp_path / "chroma_db"),
+            upload_max_bytes=12,
+        ),
+    )
+    monkeypatch.setattr(routes, "build_vector_db", lambda chunks, persist_directory, settings: object())
+    monkeypatch.setattr(routes, "count_records", lambda _vectorstore: 1)
+    client = TestClient(routes.create_app())
+
+    oversized = client.post(
+        "/upload",
+        files={"file": ("big.md", b"# Policy\n\nThis is too large.", "text/markdown")},
+    )
+    safe = client.post(
+        "/upload",
+        files={"file": ("../unsafe name.md", b"# Policy", "text/markdown")},
+    )
+
+    assert oversized.status_code == 413
+    assert safe.status_code == 200
+    assert safe.json()["filename"] == "unsafe_name.md"
+    assert (tmp_path / "data" / "uploads" / "unsafe_name.md").exists()
+
+
+def test_upload_endpoint_rejects_failed_scanner(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(upload_scan_command='python -c "import sys; sys.exit(1)"'),
+    )
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        files={"file": ("policy.md", b"# Policy", "text/markdown")},
+    )
+
+    assert response.status_code == 400
+    assert "upload rejected by scanner" in response.json()["detail"]
+
+
 def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, monkeypatch):
     source = tmp_path / "data" / "uploads" / "policy.md"
     source.parent.mkdir(parents=True)
