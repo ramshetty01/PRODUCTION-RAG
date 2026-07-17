@@ -14,11 +14,51 @@ docker run --rm -p 8000:8000 --env-file .env.example production-rag
 
 ## Docker Compose
 
-Use the production compose manifest when you want local persistence for ChromaDB
-and processed ingestion state:
+Use the production compose manifest when you want a repeatable local stack with
+the API, browser demo/static serving, embedded Chroma persistence, logs, and
+processed ingestion state:
 
 ```bash
 docker compose -f deploy/docker-compose.yml up --build
+```
+
+Open the local operator surfaces:
+
+```bash
+curl http://localhost:8000/health
+open http://localhost:8080/demo
+open http://localhost:8080/admin
+```
+
+The compose stack uses named volumes for local enterprise state:
+
+- `rag_chroma`: embedded Chroma vector index.
+- `rag_data`: uploaded documents and ingestion manifest.
+- `rag_logs`: audit, feedback, and request logs.
+
+Compose loads `.env.example` first and then an optional local `.env`, so keep
+secrets in `.env` and commit only reference values.
+
+Run the ingestion worker profile when you want to seed the default corpus into
+the same volumes:
+
+```bash
+docker compose -f deploy/docker-compose.yml --profile worker run --rm rag-worker
+```
+
+Run the optional local LLM service with Ollama:
+
+```bash
+docker compose -f deploy/docker-compose.yml --profile local-llm up --build
+```
+
+Then configure `.env` with an OpenAI-compatible Ollama endpoint and model, for
+example:
+
+```text
+RAG_LLM_PROVIDER=openai-compatible
+RAG_LLM_ENDPOINT=http://rag-ollama:11434/v1/chat/completions
+RAG_LLM_MODEL=llama3.1
 ```
 
 ## Kubernetes
