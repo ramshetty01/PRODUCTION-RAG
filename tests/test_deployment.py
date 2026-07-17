@@ -28,6 +28,11 @@ def test_deployment_docs_include_build_run_and_health_commands():
     assert "docker build -t production-rag ." in docs
     assert "docker run --rm -p 8000:8000" in docs
     assert "docker compose -f deploy/docker-compose.yml up --build" in docs
+    assert "docker compose -f deploy/docker-compose.yml --profile worker run --rm rag-worker" in docs
+    assert "docker compose -f deploy/docker-compose.yml --profile local-llm up --build" in docs
+    assert "open http://localhost:8080/demo" in docs
+    assert "RAG_LLM_ENDPOINT=http://rag-ollama:11434/v1/chat/completions" in docs
+    assert "optional local `.env`" in docs
     assert "deploy/kubernetes" in docs
     assert "curl http://localhost:8000/health" in docs
 
@@ -35,11 +40,24 @@ def test_docker_compose_defines_persistent_api_service():
     compose = (ROOT / "deploy" / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert "rag-api:" in compose
+    assert "rag-ui:" in compose
+    assert "rag-worker:" in compose
+    assert "rag-ollama:" in compose
     assert "8000:8000" in compose
+    assert "8080:8080" in compose
+    assert "11434:11434" in compose
     assert "RAG_VECTOR_DB_PATH: /app/chroma_db" in compose
-    assert "../chroma_db:/app/chroma_db" in compose
-    assert "../data:/app/data" in compose
+    assert "path: ../.env" in compose
+    assert "required: false" in compose
+    assert "rag_chroma:/app/chroma_db" in compose
+    assert "rag_data:/app/data" in compose
+    assert "rag_logs:/app/logs" in compose
+    assert "ollama_data:/root/.ollama" in compose
+    assert 'profiles: ["worker"]' in compose
+    assert 'profiles: ["local-llm"]' in compose
+    assert "scripts/ingest_corpus.py" in compose
     assert "healthcheck:" in compose
+    assert "http://127.0.0.1:8080/demo" in compose
     assert "restart: unless-stopped" in compose
 
 

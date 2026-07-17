@@ -1,3 +1,15 @@
+x-rag-env: &rag-env
+  RAG_HOST: 0.0.0.0
+  RAG_VECTOR_DB_PATH: /app/chroma_db
+  RAG_MANIFEST_PATH: /app/data/processed/ingestion_manifest.json
+  RAG_LOG_LEVEL: INFO
+  RAG_LLM_ENDPOINT: ${RAG_LLM_ENDPOINT:-}
+
+x-rag-volumes: &rag-volumes
+  - rag_chroma:/app/chroma_db
+  - rag_data:/app/data
+  - rag_logs:/app/logs
+
 services:
   rag-api:
     build:
@@ -7,20 +19,84 @@ services:
     ports:
       - "8000:8000"
     environment:
-      RAG_HOST: 0.0.0.0
+      <<: *rag-env
       RAG_PORT: 8000
-      RAG_VECTOR_DB_PATH: /app/chroma_db
-      RAG_MANIFEST_PATH: /app/data/processed/ingestion_manifest.json
-      RAG_LOG_LEVEL: INFO
     env_file:
-      - ../.env.example
-    volumes:
-      - ../chroma_db:/app/chroma_db
-      - ../data:/app/data
+      - path: ../.env.example
+      - path: ../.env
+        required: false
+    volumes: *rag-volumes
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     restart: unless-stopped
+
+  rag-ui:
+    image: production-rag:latest
+    depends_on:
+      rag-api:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *rag-env
+      RAG_PORT: 8080
+    env_file:
+      - path: ../.env.example
+      - path: ../.env
+        required: false
+    volumes: *rag-volumes
+    command: ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port 8080"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/demo"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  rag-worker:
+    image: production-rag:latest
+    profiles: ["worker"]
+    depends_on:
+      rag-api:
+        condition: service_healthy
+    environment:
+      <<: *rag-env
+    env_file:
+      - path: ../.env.example
+      - path: ../.env
+        required: false
+    volumes: *rag-volumes
+    command:
+      - python
+      - scripts/ingest_corpus.py
+      - --persist-dir
+      - /app/chroma_db
+      - --manifest
+      - /app/data/processed/ingestion_manifest.json
+    restart: "no"
+
+  rag-ollama:
+    image: ollama/ollama:latest
+    profiles: ["local-llm"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  rag_chroma:
+  rag_data:
+  rag_logs:
+  ollama_data:
