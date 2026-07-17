@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
+from src.rag.audit import DEFAULT_AUDIT_LOG, append_audit_event, audit_events_csv, load_audit_events
 from src.rag.chunking import (
     DEFAULT_DB_PATH,
     DEFAULT_PDF_PATH,
@@ -187,6 +188,10 @@ class AdminStatusResponse(BaseModel):
     index: dict
     documents: list[DocumentRecordResponse]
     failed_jobs: list[dict]
+
+
+class AuditResponse(BaseModel):
+    events: list[dict]
 
 
 router = APIRouter()
@@ -449,6 +454,19 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
             "trace": event.to_log_dict(),
             "cached": False,
         }
+        append_audit_event(
+            {
+                "request_id": request_id,
+                "user": auth_context.subject,
+                "query": safe_query,
+                "retrieval_ids": payload["retrieval"]["chunk_ids"],
+                "answer": visible_answer,
+                "citations": citation_ids(response["citations"]),
+                "model": SETTINGS.llm_model or SETTINGS.llm_provider,
+                "latency_ms": event.latency_ms,
+            },
+            _safe_api_path(DEFAULT_AUDIT_LOG),
+        )
         QUERY_CACHE.set(retrieval_query, request.top_k, payload, cache_filters)
         CONVERSATION_MEMORY.append(
             safe_session_id,
@@ -798,6 +816,18 @@ def feedback(request: FeedbackRequest):
 @router.get("/monitoring", response_model=MonitoringResponse)
 def monitoring(feedback_path: str = str(DEFAULT_FEEDBACK_LOG)):
     return MonitoringResponse(metrics=monitoring_metrics(load_feedback(_safe_api_path(feedback_path))))
+
+
+@router.get("/audit", response_model=AuditResponse)
+def audit_log(
+    format: str = "json",
+    limit: int = 100,
+    auth_context: AuthContext = Depends(_admin_context),
+):
+    events = load_audit_events(_safe_api_path(DEFAULT_AUDIT_LOG), limit=max(1, min(limit, 1000)))
+    if format == "csv":
+        return Response(audit_events_csv(events), media_type="text/csv")
+    return AuditResponse(events=events)
 
 
 @router.get("/evaluation", response_model=EvaluationResponse)
