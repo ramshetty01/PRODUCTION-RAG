@@ -19,6 +19,7 @@ MIN_PDF_PAGE_TEXT_TOKENS = 8
 
 TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]")
 SUPPORTED_DOCUMENT_SUFFIXES = {".pdf", ".md", ".markdown", ".txt", ".html", ".htm", ".csv", ".docx", ".pptx"}
+MARKDOWN_TABLE_SEPARATOR = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
 
 
 class TextExtractor(HTMLParser):
@@ -131,9 +132,61 @@ def _document_metadata(file_path: Path, page: int = 0, section: str | None = Non
     return metadata
 
 
+def format_table_row(headers: list[str], row: list[str], context: str = "") -> str:
+    pairs = []
+    for index, cell in enumerate(row):
+        value = cell.strip()
+        if not value:
+            continue
+        header = headers[index].strip() if index < len(headers) and headers[index].strip() else f"column_{index + 1}"
+        pairs.append(f"{header}: {value}")
+    content = " | ".join(pairs)
+    return f"{context.strip()} | {content}" if context.strip() and content else content
+
+
+def _split_markdown_row(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def _markdown_table_documents(file_path: Path, text: str) -> list[Document]:
+    lines = text.splitlines()
+    docs = []
+    context = ""
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            context = stripped.lstrip("#").strip()
+        if "|" in stripped and index + 1 < len(lines) and MARKDOWN_TABLE_SEPARATOR.match(lines[index + 1]):
+            headers = _split_markdown_row(stripped)
+            row_index = index + 2
+            table_row = 0
+            while row_index < len(lines) and "|" in lines[row_index].strip():
+                row = _split_markdown_row(lines[row_index])
+                content = format_table_row(headers, row, context=context)
+                if content:
+                    metadata = _document_metadata(file_path, page=table_row, section="table-row")
+                    metadata["table_headers"] = headers
+                    metadata["table_context"] = context
+                    metadata["row_index"] = table_row
+                    docs.append(Document(page_content=content, metadata=metadata))
+                row_index += 1
+                table_row += 1
+            index = row_index
+            continue
+        index += 1
+    return docs
+
+
 def load_plain_text_document(file_path: str | Path):
     file_path = Path(file_path).expanduser().resolve()
-    return [Document(page_content=file_path.read_text(encoding="utf-8"), metadata=_document_metadata(file_path))]
+    text = file_path.read_text(encoding="utf-8")
+    if file_path.suffix.lower() in {".md", ".markdown"}:
+        table_docs = _markdown_table_documents(file_path, text)
+        if table_docs:
+            return [Document(page_content=text, metadata=_document_metadata(file_path)), *table_docs]
+    return [Document(page_content=text, metadata=_document_metadata(file_path))]
 
 
 def load_html_document(file_path: str | Path):
@@ -148,10 +201,14 @@ def load_csv_document(file_path: str | Path):
     docs = []
     with file_path.open(newline="", encoding="utf-8") as handle:
         reader = csv.reader(handle)
+        headers = next(reader, [])
         for index, row in enumerate(reader):
-            text = " | ".join(cell.strip() for cell in row if cell.strip())
+            text = format_table_row(headers, row)
             if text:
-                docs.append(Document(page_content=text, metadata=_document_metadata(file_path, page=index, section="row")))
+                metadata = _document_metadata(file_path, page=index, section="table-row")
+                metadata["table_headers"] = headers
+                metadata["row_index"] = index
+                docs.append(Document(page_content=text, metadata=metadata))
     return docs
 
 
