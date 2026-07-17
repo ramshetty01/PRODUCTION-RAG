@@ -44,7 +44,7 @@ from src.rag.citations import productize_answer_citations, productize_citations
 from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode, select_retrieval_strategy
 from src.rag.runtime_quality import score_runtime_answer
-from src.rag.security import build_rate_limiter, validate_path, validate_query
+from src.rag.security import build_rate_limiter, run_upload_scan, sanitize_upload_filename, validate_path, validate_query
 from src.rag.vector_store import build_vector_db, count_records, delete_records_by_metadata
 
 
@@ -639,15 +639,25 @@ async def upload_document(
     if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
         raise HTTPException(status_code=400, detail="supported upload types: PDF, DOCX, PPTX, Markdown, HTML, CSV, or text")
 
-    safe_name = Path(file.filename or f"upload{suffix}").name
+    safe_name = sanitize_upload_filename(file.filename or f"upload{suffix}")
+    if Path(safe_name).suffix.lower() not in SUPPORTED_UPLOAD_SUFFIXES:
+        raise HTTPException(status_code=400, detail="supported upload types: PDF, DOCX, PPTX, Markdown, HTML, CSV, or text")
     upload_dir = _safe_api_path(PROJECT_ROOT / "data" / "uploads")
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_path = upload_dir / safe_name
+    saved_path = _safe_api_path(saved_path)
 
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="uploaded file is empty")
+    if len(content) > SETTINGS.upload_max_bytes:
+        raise HTTPException(status_code=413, detail=f"uploaded file exceeds {SETTINGS.upload_max_bytes} bytes")
     saved_path.write_bytes(content)
+    try:
+        run_upload_scan(saved_path, SETTINGS.upload_scan_command)
+    except ValueError as exc:
+        saved_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"upload rejected by scanner: {exc}") from exc
 
     try:
         manifest_path = _safe_api_path(SETTINGS.manifest_path)

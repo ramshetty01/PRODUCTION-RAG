@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import shlex
+import subprocess
 import time
 from collections import defaultdict, deque
 from pathlib import Path
@@ -13,6 +15,7 @@ PROMPT_INJECTION_PATTERNS = [
 ]
 EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 PHONE_PATTERN = re.compile(r"\b(?:\+?\d[\d -]{7,}\d)\b")
+SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def contains_prompt_injection(text: str) -> bool:
@@ -46,6 +49,26 @@ def validate_path(path: str | Path, allowed_root: str | Path = ".") -> Path:
     except ValueError as exc:
         raise ValueError(f"path is outside allowed root: {path}") from exc
     return resolved
+
+
+def sanitize_upload_filename(filename: str, fallback: str = "upload") -> str:
+    name = Path(filename or fallback).name.replace("\x00", "")
+    sanitized = SAFE_FILENAME_PATTERN.sub("_", name).strip("._")
+    if not sanitized:
+        sanitized = fallback
+    return sanitized[:180]
+
+
+def run_upload_scan(path: str | Path, command: str) -> None:
+    if not command:
+        return
+    try:
+        completed = subprocess.run([*shlex.split(command), str(path)], capture_output=True, text=True, check=False)
+    except OSError as exc:
+        raise ValueError(str(exc)) from exc
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "upload failed malware scan").strip()
+        raise ValueError(detail)
 
 
 class RateLimiter:
