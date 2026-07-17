@@ -877,6 +877,11 @@ def demo_app():
     return FileResponse(DEMO_DIR / "app.js", media_type="application/javascript")
 
 
+@router.get("/demo/state.js", include_in_schema=False)
+def demo_state():
+    return FileResponse(DEMO_DIR / "state.js", media_type="application/javascript")
+
+
 @router.get("/demo/fonts/{font_name}", include_in_schema=False)
 def demo_font(font_name: str):
     font_path = DEMO_DIR / "fonts" / font_name
