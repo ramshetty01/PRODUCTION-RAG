@@ -154,6 +154,7 @@ def test_demo_frontend_assets_are_served():
     assert "credential" in page.text
     assert "data-auth-preset=\"admin\"" in page.text
     assert "documentUpload" in page.text
+    assert 'accept=".pdf,.md,.markdown,.txt,.docx,.pptx,.html,.csv"' in page.text
     assert "indexStatus" in page.text
     assert 'type="module" src="/demo/app.js"' in page.text
     assert "evalFaithfulness" in page.text
