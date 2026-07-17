@@ -403,6 +403,9 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["request_id"]
     assert body["answer"] == "A runner executes jobs. [docs:p2:c3]"
     assert body["citations"][0]["id"] == "docs:p2:c3"
+    assert body["quality"]["status"] == "passed"
+    assert body["quality"]["citation_coverage"] == 1.0
+    assert body["quality"]["evidence_support"] == 1.0
     assert body["retrieval"] == {
         "mode": "reranked",
         "requested_mode": "reranked",
@@ -426,6 +429,38 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["trace"]["latency_ms"] >= 0
     assert body["trace"]["token_usage"]["answer_tokens"] > 0
     assert body["cached"] is False
+
+
+def test_query_endpoint_warns_on_failed_runtime_quality_gate(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    monkeypatch.setattr(
+        routes,
+        "generate_answer",
+        lambda query, chunks: {
+            "answer": "The payroll system contains unsupported vendor guarantees. [docs:p2:c3]",
+            "citations": [
+                {
+                    "id": "docs:p2:c3",
+                    "source": "docs.pdf",
+                    "source_path": "/tmp/docs.pdf",
+                    "page": 2,
+                    "chunk_index": 3,
+                    "quote": "A runner executes jobs.",
+                }
+            ],
+            "token_usage": {"prompt_tokens": 4, "answer_tokens": 8},
+        },
+    )
+    client = TestClient(routes.create_app())
+
+    response = client.post("/query", json={"query": "What does a runner do?", "top_k": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["quality"]["status"] == "warning"
+    assert body["quality"]["passed"] is False
+    assert "Quality warning:" in body["answer"]
 
 
 def test_query_endpoint_uses_session_history_for_follow_up_retrieval(monkeypatch):

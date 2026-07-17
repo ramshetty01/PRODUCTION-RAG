@@ -40,6 +40,7 @@ from src.rag.observability import (
 from src.rag.performance import build_query_cache, estimate_llm_cost
 from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode, select_retrieval_strategy
+from src.rag.runtime_quality import score_runtime_answer
 from src.rag.security import build_rate_limiter, validate_path, validate_query
 from src.rag.vector_store import build_vector_db, count_records, delete_records_by_metadata
 
@@ -99,6 +100,7 @@ class QueryResponse(BaseModel):
     request_id: str
     answer: str
     citations: list[CitationResponse]
+    quality: dict
     retrieval: dict
     trace: dict
     cached: bool = False
@@ -386,12 +388,16 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                 event.retrieved_chunk_ids = chunk_ids(chunks)
                 event.answer = response["answer"]
                 event.citations = citation_ids(response["citations"])
+            quality = score_runtime_answer(response["answer"], chunks)
+            if not quality.passed:
+                response["answer"] = f"{response['answer']}\n\nQuality warning: {'; '.join(quality.reasons)}"
             event.token_usage = response.get("token_usage", {})
             event.token_usage["estimated_cost"] = estimate_llm_cost(event.token_usage)
         payload = {
             "request_id": request_id,
             "answer": response["answer"],
             "citations": response["citations"],
+            "quality": quality.to_dict(),
             "retrieval": {
                 "mode": retrieval_mode,
                 "requested_mode": requested_mode,
