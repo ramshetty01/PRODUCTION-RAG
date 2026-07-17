@@ -128,6 +128,12 @@
             <article class="answer-surface">
               <p id="answerText">No answer yet.</p>
             </article>
+            <form id="feedbackForm" class="feedback-form">
+              <button type="button" data-feedback="up" aria-label="Helpful answer">Good</button>
+              <button type="button" data-feedback="down" aria-label="Unhelpful answer">Bad</button>
+              <input id="feedbackNote" type="text" placeholder="Optional correction">
+              <span id="feedbackStatus" class="pill muted">No feedback</span>
+            </form>
           </section>
 
           <aside class="evidence-panel">

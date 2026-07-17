@@ -678,6 +678,17 @@ h3 {
   gap: 8px;
 }
 
+.feedback-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.feedback-form input {
+  flex: 1;
+}
+
 .trace-table div {
   display: flex;
   align-items: center;

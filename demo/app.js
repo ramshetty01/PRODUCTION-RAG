@@ -32,6 +32,9 @@ const evalDataset = document.querySelector("#evalDataset");
 const metricRequests = document.querySelector("#metricRequests");
 const metricLatency = document.querySelector("#metricLatency");
 const metricStatus = document.querySelector("#metricStatus");
+const feedbackForm = document.querySelector("#feedbackForm");
+const feedbackNote = document.querySelector("#feedbackNote");
+const feedbackStatus = document.querySelector("#feedbackStatus");
 const workspaceId = localStorage.getItem("rag_workspace_id") || crypto.randomUUID();
 const sessionId = localStorage.getItem("rag_session_id") || crypto.randomUUID();
 const savedAuthType = localStorage.getItem("rag_auth_type") || "none";
@@ -41,6 +44,7 @@ localStorage.setItem("rag_workspace_id", workspaceId);
 localStorage.setItem("rag_session_id", sessionId);
 authType.value = savedAuthType;
 credential.value = savedCredential;
+let lastPayload = null;
 
 const scenarios = {
   vendor: {
@@ -131,6 +135,7 @@ function renderCitations(items) {
 }
 
 function renderResult(payload) {
+  lastPayload = payload;
   answerText.textContent = payload.answer || "The answer is not available in the retrieved context.";
   requestId.textContent = payload.request_id || "No request";
   cacheBadge.textContent = payload.cached ? "Cached" : "Fresh";
@@ -144,9 +149,11 @@ function renderResult(payload) {
   traceSubject.textContent = text(retrieval.auth_subject);
   authBadge.textContent = `${text(retrieval.auth_subject)} · ${text((retrieval.auth_roles || []).join("|"))}`;
   traceCost.textContent = text(trace.token_usage?.estimated_cost);
+  feedbackStatus.textContent = "Ready";
 }
 
 function renderError(error) {
+  lastPayload = null;
   answerText.textContent = error;
   requestId.textContent = "Request failed";
   requestId.className = "pill error";
@@ -157,6 +164,7 @@ function renderError(error) {
   traceCost.textContent = "-";
   cacheBadge.textContent = "Error";
   cacheBadge.className = "pill error";
+  feedbackStatus.textContent = "No feedback";
 }
 
 function selectedFilters() {
@@ -411,6 +419,31 @@ async function uploadDocument(event) {
   }
 }
 
+async function sendFeedback(helpful) {
+  if (!lastPayload) {
+    feedbackStatus.textContent = "Ask first";
+    return;
+  }
+  const response = await fetch("/feedback", {
+    method: "POST",
+    headers: authHeaders({"Content-Type": "application/json"}),
+    body: JSON.stringify({
+      request_id: lastPayload.request_id,
+      query: lastPayload.retrieval?.original_query || lastPayload.trace?.query || "",
+      answer: lastPayload.answer,
+      helpful,
+      citations: (lastPayload.citations || []).map((citation) => citation.id),
+      latency_ms: lastPayload.trace?.latency_ms,
+      note: feedbackNote.value.trim() || null,
+    }),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(authErrorMessage(response.status, payload) || `HTTP ${response.status}`);
+  }
+  feedbackStatus.textContent = helpful ? "Marked helpful" : "Marked unhelpful";
+}
+
 document.querySelectorAll("[data-scenario]").forEach((button) => {
   button.addEventListener("click", () => {
     const scenario = scenarios[button.dataset.scenario];
@@ -431,6 +464,13 @@ filterType.addEventListener("change", () => renderActiveFilters(selectedFilters(
 filterRole.addEventListener("input", () => renderActiveFilters(selectedFilters()));
 form.addEventListener("submit", askQuestion);
 uploadForm.addEventListener("submit", uploadDocument);
+feedbackForm.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-feedback]");
+  if (!button) return;
+  sendFeedback(button.dataset.feedback === "up").catch((error) => {
+    feedbackStatus.textContent = error.message;
+  });
+});
 renderActiveFilters(selectedFilters());
 checkHealth();
 refreshMetrics();
