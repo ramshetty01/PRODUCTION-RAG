@@ -29,7 +29,11 @@ def metadata_matches(chunk, filters: dict | None = None) -> bool:
         return True
     for key, expected in filters.items():
         actual = chunk.metadata.get(key)
-        if isinstance(expected, (list, tuple, set)):
+        if isinstance(actual, (list, tuple, set)):
+            expected_values = set(expected) if isinstance(expected, (list, tuple, set)) else {expected}
+            if not set(actual) & expected_values:
+                return False
+        elif isinstance(expected, (list, tuple, set)):
             if actual not in expected:
                 return False
         elif actual != expected:
