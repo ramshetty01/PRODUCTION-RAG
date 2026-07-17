@@ -191,6 +191,8 @@ def test_demo_frontend_assets_are_served():
     assert "citation-detail" in script.text
     assert "Open source" in script.text
     assert "feedbackForm" in page.text
+    assert 'id="requestId" class="pill muted" hidden' in page.text
+    assert 'id="feedbackForm" class="feedback-form" hidden' in page.text
     assert "/feedback" in script.text
     assert "lastPayload.request_id" in script.text
     assert ".workspace" in styles.text
