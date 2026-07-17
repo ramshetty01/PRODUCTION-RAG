@@ -373,9 +373,13 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
         "auth_roles": ["public"],
         "tenant_id": "default",
         "query": "What does a runner do?",
+        "original_query": "What does a runner do?",
+        "rewritten_query": "What does a runner do?",
         "conversation_turns": 0,
     }
     assert body["trace"]["request_id"] == body["request_id"]
+    assert body["trace"]["original_query"] == "What does a runner do?"
+    assert body["trace"]["rewritten_query"] == "What does a runner do?"
     assert body["trace"]["retrieved_chunk_ids"] == ["docs:p2:c3"]
     assert body["trace"]["citations"] == ["docs:p2:c3"]
     assert body["trace"]["latency_ms"] >= 0
@@ -402,9 +406,46 @@ def test_query_endpoint_uses_session_history_for_follow_up_retrieval(monkeypatch
     assert first.status_code == 200
     assert second.status_code == 200
     assert RecordingVectorStore.queries[0] == "What does a runner do?"
-    assert RecordingVectorStore.queries[1] == "What does a runner do? What about its schedule?"
+    assert RecordingVectorStore.queries[1] == (
+        "Conversation context: What does a runner do?. Follow-up question: What about its schedule?"
+    )
     assert "A runner executes jobs." not in RecordingVectorStore.queries[1]
-    assert second.json()["retrieval"]["conversation_turns"] == 1
+    body = second.json()
+    assert body["retrieval"]["conversation_turns"] == 1
+    assert body["trace"]["original_query"] == "What about its schedule?"
+    assert body["trace"]["rewritten_query"] == (
+        "Conversation context: What does a runner do?. Follow-up question: What about its schedule?"
+    )
+
+
+def test_query_endpoint_rewrites_ambiguous_follow_up_question(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    routes.CONVERSATION_MEMORY.clear()
+    RecordingVectorStore.queries.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: RecordingVectorStore())
+    client = TestClient(routes.create_app())
+
+    client.post(
+        "/query",
+        json={"query": "List the onboarding controls", "session_id": "session-b", "workspace_id": "workspace-a", "top_k": 2},
+    )
+    response = client.post(
+        "/query",
+        json={
+            "query": "explain more about the second point",
+            "session_id": "session-b",
+            "workspace_id": "workspace-a",
+            "top_k": 2,
+        },
+    )
+
+    assert response.status_code == 200
+    rewritten = response.json()["trace"]["rewritten_query"]
+    assert rewritten == (
+        "Conversation context: List the onboarding controls. "
+        "Follow-up question: explain more about the second point"
+    )
+    assert RecordingVectorStore.queries[-1] == rewritten
 
 
 def test_query_stream_endpoint_emits_tokens_and_final_payload(monkeypatch):

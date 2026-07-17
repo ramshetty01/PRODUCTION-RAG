@@ -5,7 +5,10 @@ from dataclasses import dataclass, field
 
 
 FOLLOW_UP_PATTERN = re.compile(
-    r"\b(it|its|that|this|they|them|those|he|she|his|her|their|same|above|previous|earlier)\b",
+    r"\b("
+    r"it|its|that|this|they|them|those|he|she|his|her|their|same|above|previous|earlier|"
+    r"more|second|third|first|last|point|detail|details"
+    r")\b",
     re.I,
 )
 
@@ -52,4 +55,4 @@ def build_contextual_query(query: str, turns: list[ConversationTurn], max_turns:
     if not recent_user_questions:
         return clean_query
     history = " ".join(recent_user_questions)
-    return f"{history} {clean_query}"
+    return f"Conversation context: {history}. Follow-up question: {clean_query}"

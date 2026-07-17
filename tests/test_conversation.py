@@ -19,6 +19,23 @@ def test_contextual_query_only_rewrites_follow_ups():
     turns = [ConversationTurn(user="What evidence is required for vendor onboarding?", assistant="SOC 2. [a]")]
 
     assert build_contextual_query("What about its renewal?", turns) == (
-        "What evidence is required for vendor onboarding? What about its renewal?"
+        "Conversation context: What evidence is required for vendor onboarding?. "
+        "Follow-up question: What about its renewal?"
     )
     assert build_contextual_query("Explain payroll controls", turns) == "Explain payroll controls"
+
+
+def test_contextual_query_rewrites_ambiguous_follow_ups():
+    turns = [
+        ConversationTurn(user="List the onboarding controls for vendors", assistant="One. [a] Two. [b]"),
+        ConversationTurn(user="Which one needs SOC 2 evidence?", assistant="The second control. [b]"),
+    ]
+
+    rewritten = build_contextual_query("explain more about the second point", turns)
+
+    assert rewritten == (
+        "Conversation context: List the onboarding controls for vendors Which one needs SOC 2 evidence?. "
+        "Follow-up question: explain more about the second point"
+    )
+    assert "One. [a]" not in rewritten
+    assert "The second control" not in rewritten
