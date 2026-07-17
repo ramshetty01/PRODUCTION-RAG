@@ -31,6 +31,10 @@ class RuntimeSettings:
     llm_provider: str = "extractive"
     llm_model: str = ""
     llm_api_key: str = ""
+    llm_endpoint: str = ""
+    llm_timeout_seconds: int = 60
+    llm_max_tokens: int = 700
+    llm_temperature: float = 0.1
     reranker_provider: str = "lexical"
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     reranker_allow_fallback: bool = True
@@ -77,6 +81,11 @@ def _setting_bool(dotenv_values: dict[str, str], name: str, default: bool) -> bo
     return value.lower() in {"1", "true", "yes", "on"}
 
 
+def _setting_float(dotenv_values: dict[str, str], name: str, default: float) -> float:
+    value = os.getenv(name) or dotenv_values.get(name)
+    return float(value) if value not in (None, "") else default
+
+
 def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
     dotenv_values = load_dotenv(dotenv_path) if dotenv_path else {}
     return RuntimeSettings(
@@ -97,6 +106,10 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         llm_provider=_setting_value(dotenv_values, "RAG_LLM_PROVIDER", "extractive"),
         llm_model=_setting_value(dotenv_values, "RAG_LLM_MODEL", ""),
         llm_api_key=_setting_value(dotenv_values, "RAG_LLM_API_KEY", ""),
+        llm_endpoint=_setting_value(dotenv_values, "RAG_LLM_ENDPOINT", ""),
+        llm_timeout_seconds=_setting_int(dotenv_values, "RAG_LLM_TIMEOUT_SECONDS", 60),
+        llm_max_tokens=_setting_int(dotenv_values, "RAG_LLM_MAX_TOKENS", 700),
+        llm_temperature=_setting_float(dotenv_values, "RAG_LLM_TEMPERATURE", 0.1),
         reranker_provider=_setting_value(dotenv_values, "RAG_RERANKER_PROVIDER", "lexical"),
         reranker_model=_setting_value(
             dotenv_values,

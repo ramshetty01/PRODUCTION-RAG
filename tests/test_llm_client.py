@@ -3,7 +3,7 @@ import urllib.error
 
 import pytest
 
-from src.rag.llm.client import OpenAICompatibleLLMClient, OpenRouterLLMClient
+from src.rag.llm.client import LocalOpenAICompatibleLLMClient, OpenAICompatibleLLMClient, OpenRouterLLMClient
 
 
 class FakeResponse:
@@ -80,3 +80,44 @@ def test_openai_compatible_client_wraps_http_errors(monkeypatch):
 
     with pytest.raises(RuntimeError, match="status 401"):
         client.generate("Prompt")
+
+
+def test_local_openai_compatible_client_allows_missing_api_key(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["headers"] = dict(request.header_items())
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse({"choices": [{"message": {"content": "Local answer. [docs:p0:c0]"}}]})
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = LocalOpenAICompatibleLLMClient(model="llama3.1:8b")
+
+    answer = client.generate("Prompt")
+
+    assert answer == "Local answer. [docs:p0:c0]"
+    assert "Authorization" not in captured["headers"]
+    assert captured["payload"]["model"] == "llama3.1:8b"
+
+
+def test_openai_compatible_health_check_uses_models_endpoint(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["timeout"] = timeout
+        return FakeResponse({"data": [{"id": "llama"}]})
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = LocalOpenAICompatibleLLMClient(
+        model="llama",
+        endpoint="http://localhost:8001/v1/chat/completions",
+        timeout_seconds=3,
+    )
+
+    result = client.health_check()
+
+    assert result["status"] == "ok"
+    assert result["model"] == "llama"
+    assert captured["url"] == "http://localhost:8001/v1/models"
+    assert captured["timeout"] == 3

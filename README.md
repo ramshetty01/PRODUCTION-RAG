@@ -118,12 +118,55 @@ OpenTelemetry tracing is disabled by default for local development. Set
 `RAG_OTEL_ENABLED=true` and `RAG_OTEL_EXPORTER_OTLP_ENDPOINT` when deploying
 behind an OTLP collector.
 
-For local generation quality, set `RAG_LLM_PROVIDER=local`. This uses the
-local evidence-synthesis generator, which can combine multiple retrieved chunks
-into a concise cited answer without calling a hosted model. Keep
-`RAG_LLM_PROVIDER=extractive` when you need the single-sentence deterministic
-fallback used by the unit tests. Hosted OpenAI-compatible providers remain
-available through `RAG_LLM_PROVIDER=openai` or `RAG_LLM_PROVIDER=openrouter`.
+For local generation quality without a model server, set
+`RAG_LLM_PROVIDER=local`. This uses the local evidence-synthesis generator,
+which can combine multiple retrieved chunks into a concise cited answer without
+calling a hosted model. Keep `RAG_LLM_PROVIDER=extractive` when you need the
+single-sentence deterministic fallback used by the unit tests.
+
+For local LLM serving through Ollama, vLLM, llama.cpp server, LM Studio, or any
+OpenAI-compatible `/v1/chat/completions` runtime, use `local-openai`:
+
+```bash
+RAG_LLM_PROVIDER=local-openai
+RAG_LLM_ENDPOINT=http://localhost:11434/v1/chat/completions
+RAG_LLM_MODEL=llama3.1:8b
+RAG_LLM_TIMEOUT_SECONDS=60
+RAG_LLM_MAX_TOKENS=700
+RAG_LLM_TEMPERATURE=0.1
+```
+
+Example Ollama setup:
+
+```bash
+ollama pull llama3.1:8b
+ollama serve
+```
+
+Example vLLM setup:
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+  --model meta-llama/Meta-Llama-3.1-8B-Instruct \
+  --host 0.0.0.0 \
+  --port 8001
+```
+
+Example llama.cpp server setup:
+
+```bash
+llama-server -m ./models/model.gguf --host 0.0.0.0 --port 8001
+```
+
+Then point `RAG_LLM_ENDPOINT` at the server's chat completions URL, for example
+`http://localhost:8001/v1/chat/completions`, and verify it:
+
+```bash
+curl http://localhost:8000/llm/health
+```
+
+Hosted OpenAI-compatible providers remain available through
+`RAG_LLM_PROVIDER=openai` or `RAG_LLM_PROVIDER=openrouter`.
 
 Supported query retrieval modes are `semantic`, `exact`, `hybrid`, `sparse`,
 and `reranked`. Set the default with `RAG_RETRIEVAL_MODE`, or override it per API

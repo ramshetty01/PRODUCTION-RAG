@@ -5,7 +5,14 @@ from dataclasses import dataclass
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from src.rag.config import RuntimeSettings, load_settings
-from src.rag.llm.client import ExtractiveLLMClient, LLMClient, LocalSynthesisLLMClient, OpenAILLMClient, OpenRouterLLMClient
+from src.rag.llm.client import (
+    ExtractiveLLMClient,
+    LLMClient,
+    LocalOpenAICompatibleLLMClient,
+    LocalSynthesisLLMClient,
+    OpenAILLMClient,
+    OpenRouterLLMClient,
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +45,9 @@ class OpenRouterModelProvider(LocalModelProvider):
         return OpenRouterLLMClient(
             api_key=self.settings.llm_api_key,
             model=self.settings.llm_model,
+            timeout_seconds=self.settings.llm_timeout_seconds,
+            max_tokens=self.settings.llm_max_tokens,
+            temperature=self.settings.llm_temperature,
         )
 
 
@@ -46,12 +56,28 @@ class OpenAIModelProvider(LocalModelProvider):
         return OpenAILLMClient(
             api_key=self.settings.llm_api_key,
             model=self.settings.llm_model,
+            timeout_seconds=self.settings.llm_timeout_seconds,
+            max_tokens=self.settings.llm_max_tokens,
+            temperature=self.settings.llm_temperature,
+        )
+
+
+class LocalOpenAIModelProvider(LocalModelProvider):
+    def llm(self) -> LLMClient:
+        return LocalOpenAICompatibleLLMClient(
+            api_key=self.settings.llm_api_key,
+            model=self.settings.llm_model,
+            endpoint=self.settings.llm_endpoint or LocalOpenAICompatibleLLMClient.endpoint,
+            timeout_seconds=self.settings.llm_timeout_seconds,
+            max_tokens=self.settings.llm_max_tokens,
+            temperature=self.settings.llm_temperature,
         )
 
 
 PROVIDERS = {
     "local": LocalModelProvider,
     "extractive": ExtractiveModelProvider,
+    "local-openai": LocalOpenAIModelProvider,
     "openai": OpenAIModelProvider,
     "openrouter": OpenRouterModelProvider,
 }

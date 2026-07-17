@@ -66,6 +66,35 @@ def test_health_endpoint_returns_status():
     assert response.headers["X-Request-ID"]
 
 
+def test_llm_health_endpoint_returns_provider_status(monkeypatch):
+    class FakeLLM:
+        def health_check(self):
+            return {
+                "status": "ok",
+                "provider": "LocalOpenAICompatibleLLMClient",
+                "model": "llama",
+                "endpoint": "http://localhost:11434/v1/chat/completions",
+            }
+
+    class FakeProvider:
+        def llm(self):
+            return FakeLLM()
+
+    monkeypatch.setattr(routes, "get_model_provider", lambda settings: FakeProvider())
+    client = TestClient(routes.create_app())
+
+    response = client.get("/llm/health")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "provider": "LocalOpenAICompatibleLLMClient",
+        "model": "llama",
+        "endpoint": "http://localhost:11434/v1/chat/completions",
+        "error": None,
+    }
+
+
 def test_demo_frontend_assets_are_served():
     client = TestClient(routes.create_app())
 
