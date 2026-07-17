@@ -148,7 +148,9 @@ def test_demo_frontend_assets_are_served():
 
     assert page.status_code == 200
     assert "Production RAG Demo Console" in page.text
-    assert "Chat with your data" in page.text
+    assert "Evidence-first answers" in page.text
+    assert "Local enterprise RAG" in page.text
+    assert "Private corpus" in page.text
     assert "What evidence is required before vendor onboarding?" in page.text
     assert "authType" in page.text
     assert "credential" in page.text
@@ -196,6 +198,7 @@ def test_demo_frontend_assets_are_served():
     assert "/feedback" in script.text
     assert "lastPayload.request_id" in script.text
     assert ".workspace" in styles.text
+    assert ".stage-topline" in styles.text
     assert ".auth-strip" in styles.text
     assert ".upload-form" in styles.text
     assert "min-height: 700px" in styles.text
