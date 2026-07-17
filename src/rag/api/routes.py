@@ -10,7 +10,15 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
-from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_text_file, chunk_token_summary, count_tokens
+from src.rag.chunking import (
+    DEFAULT_DB_PATH,
+    DEFAULT_PDF_PATH,
+    SUPPORTED_DOCUMENT_SUFFIXES,
+    chunk_file,
+    chunk_pdf,
+    chunk_token_summary,
+    count_tokens,
+)
 from src.rag.config import load_settings
 from src.rag.conversation import ConversationMemoryStore, ConversationTurn, build_contextual_query
 from src.rag.evaluation_report import build_evaluation_report
@@ -41,7 +49,7 @@ SUPPORTED_RETRIEVAL_MODES = {"semantic", "exact", "hybrid", "sparse", "reranked"
 AUTH_CONTEXTS = parse_api_keys(SETTINGS.api_keys)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEMO_DIR = PROJECT_ROOT / "demo"
-SUPPORTED_UPLOAD_SUFFIXES = {".pdf", ".md", ".markdown", ".txt"}
+SUPPORTED_UPLOAD_SUFFIXES = SUPPORTED_DOCUMENT_SUFFIXES
 
 
 class HealthResponse(BaseModel):
@@ -209,14 +217,7 @@ def _clear_query_cache() -> None:
 
 
 def _chunks_for_path(path: Path, document_version: str):
-    if path.suffix.lower() == ".pdf":
-        return chunk_pdf(
-            path,
-            chunk_size=SETTINGS.chunk_size,
-            chunk_overlap=SETTINGS.chunk_overlap,
-            document_version=document_version,
-        )
-    return chunk_text_file(
+    return chunk_file(
         path,
         chunk_size=SETTINGS.chunk_size,
         chunk_overlap=SETTINGS.chunk_overlap,
@@ -524,7 +525,7 @@ async def upload_document(file: UploadFile = File(...), workspace_id: str | None
     safe_workspace_id = _safe_workspace_id(workspace_id)
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
-        raise HTTPException(status_code=400, detail="supported upload types: PDF, Markdown, or text")
+        raise HTTPException(status_code=400, detail="supported upload types: PDF, DOCX, PPTX, Markdown, HTML, CSV, or text")
 
     safe_name = Path(file.filename or f"upload{suffix}").name
     upload_dir = _safe_api_path(PROJECT_ROOT / "data" / "uploads")

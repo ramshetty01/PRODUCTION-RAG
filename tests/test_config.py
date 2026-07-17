@@ -61,7 +61,15 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
 
 
 def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
-    monkeypatch.delenv("RAG_TOP_K", raising=False)
+    for key in [
+        "RAG_TOP_K",
+        "RAG_LLM_PROVIDER",
+        "RAG_LLM_ENDPOINT",
+        "RAG_LLM_TIMEOUT_SECONDS",
+        "RAG_LLM_MAX_TOKENS",
+        "RAG_LLM_TEMPERATURE",
+    ]:
+        monkeypatch.delenv(key, raising=False)
     dotenv = tmp_path / ".env"
     dotenv.write_text(
         "\n".join(

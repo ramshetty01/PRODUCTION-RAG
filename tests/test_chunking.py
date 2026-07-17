@@ -1,8 +1,12 @@
+import zipfile
+
 from langchain_core.documents import Document
 
 from src.rag.chunking import (
     DEFAULT_CHUNK_OVERLAP_TOKENS,
     DEFAULT_CHUNK_TOKENS,
+    SUPPORTED_DOCUMENT_SUFFIXES,
+    chunk_file,
     chunk_documents,
     chunk_text_file,
     chunk_token_summary,
@@ -68,3 +72,63 @@ def test_chunk_text_file_ingests_markdown_with_document_metadata(tmp_path):
     assert chunks[0].metadata["document_id"] == "security-policy"
     assert chunks[0].metadata["document_version"] == "v3"
     assert chunks[0].metadata["access_roles"] == ["public"]
+
+
+def test_chunk_file_supports_html_csv_docx_and_pptx(tmp_path):
+    html = tmp_path / "policy.html"
+    html.write_text("<html><body><h1>Vendor Policy</h1><p>SOC 2 required.</p></body></html>", encoding="utf-8")
+    csv_file = tmp_path / "controls.csv"
+    csv_file.write_text("control,evidence\nvendor,SOC 2\nincident,review", encoding="utf-8")
+    docx = tmp_path / "brief.docx"
+    with zipfile.ZipFile(docx, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            "<w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'>"
+            "<w:body><w:p><w:r><w:t>DOCX vendor evidence</w:t></w:r></w:p></w:body></w:document>",
+        )
+    pptx = tmp_path / "deck.pptx"
+    with zipfile.ZipFile(pptx, "w") as archive:
+        archive.writestr(
+            "ppt/slides/slide1.xml",
+            "<p:sld xmlns:p='http://schemas.openxmlformats.org/presentationml/2006/main' "
+            "xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'>"
+            "<p:cSld><p:spTree><a:t>PPTX audit packet</a:t></p:spTree></p:cSld></p:sld>",
+        )
+
+    html_chunks = chunk_file(html, chunk_size=20, chunk_overlap=2)
+    csv_chunks = chunk_file(csv_file, chunk_size=20, chunk_overlap=2)
+    docx_chunks = chunk_file(docx, chunk_size=20, chunk_overlap=2)
+    pptx_chunks = chunk_file(pptx, chunk_size=20, chunk_overlap=2)
+
+    assert {".pdf", ".docx", ".pptx", ".html", ".csv", ".txt", ".md", ".markdown"} <= SUPPORTED_DOCUMENT_SUFFIXES
+    assert "Vendor Policy" in html_chunks[0].page_content
+    assert csv_chunks[0].metadata["section"] == "row"
+    assert any("SOC 2" in chunk.page_content for chunk in csv_chunks)
+    assert "DOCX vendor evidence" in docx_chunks[0].page_content
+    assert docx_chunks[0].metadata["parser"] == "docx"
+    assert "PPTX audit packet" in pptx_chunks[0].page_content
+    assert pptx_chunks[0].metadata["section"] == "slide-1"
+
+
+def test_chunk_file_rejects_unsupported_type(tmp_path):
+    source = tmp_path / "archive.json"
+    source.write_text("{}", encoding="utf-8")
+
+    try:
+        chunk_file(source)
+    except ValueError as exc:
+        assert "unsupported file type" in str(exc)
+    else:
+        raise AssertionError("expected unsupported file type to fail")
+
+
+def test_chunk_file_reports_invalid_office_package(tmp_path):
+    source = tmp_path / "broken.docx"
+    source.write_text("not a zip", encoding="utf-8")
+
+    try:
+        chunk_file(source)
+    except ValueError as exc:
+        assert "invalid .docx file" in str(exc)
+    else:
+        raise AssertionError("expected invalid office package to fail")
