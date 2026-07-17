@@ -203,10 +203,12 @@ Hosted OpenAI-compatible providers remain available through
 `RAG_LLM_PROVIDER=openai` or `RAG_LLM_PROVIDER=openrouter`.
 
 Supported query retrieval modes are `auto`, `semantic`, `exact`, `hybrid`,
-`sparse`, and `reranked`. `auto` routes quoted phrases and identifiers to exact
-search, table/keyword lookups to sparse search, long conceptual questions to
-hybrid search, and short conceptual questions to semantic search. Set the
-default with `RAG_RETRIEVAL_MODE`, or override it per API request:
+`sparse`, and `reranked`. The production default is `reranked`, which gathers
+hybrid candidates and rescores them before returning the final Top K.
+`auto` routes quoted phrases and identifiers to exact search, table/keyword
+lookups to sparse search, long conceptual questions to hybrid search, and short
+conceptual questions to semantic search. Set the default with
+`RAG_RETRIEVAL_MODE`, or override it per API request:
 
 ```bash
 curl -X POST http://localhost:8000/query \

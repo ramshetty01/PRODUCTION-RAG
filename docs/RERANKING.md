@@ -1,9 +1,11 @@
 # Reranking
 
 Reranking improves precision by rescoring retrieved chunks after the first
-vector, keyword, or hybrid candidate pass. The default test-safe reranker is
-lexical and deterministic. Production runs can opt into a real cross-encoder
-reranker from Sentence Transformers.
+vector, keyword, or hybrid candidate pass. `RAG_RETRIEVAL_MODE=reranked` is the
+default production retrieval mode, using hybrid retrieval for candidates before
+reranking the final Top K. The default test-safe reranker is lexical and
+deterministic. Production runs can opt into a real cross-encoder reranker from
+Sentence Transformers.
 
 ## Providers
 
@@ -16,6 +18,7 @@ reranker from Sentence Transformers.
 Set these environment variables in `.env`:
 
 ```bash
+RAG_RETRIEVAL_MODE=reranked
 RAG_RERANKER_PROVIDER=cross_encoder
 RAG_RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
 RAG_RERANKER_ALLOW_FALLBACK=true

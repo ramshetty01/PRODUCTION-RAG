@@ -186,12 +186,15 @@ def retrieve_by_mode(
             user_roles=user_roles,
         )
     if mode == "reranked":
-        candidates = retrieve_reranked_chunks(query, vectorstore, documents, top_k=top_k, reranker=reranker)
-        return filter_authorized_chunks(
-            candidates,
+        return retrieve_reranked_chunks(
+            query,
+            vectorstore,
+            documents,
+            top_k=top_k,
+            reranker=reranker,
             metadata_filters=metadata_filters,
             user_roles=user_roles,
-        )[:top_k]
+        )
     raise ValueError(f"Unsupported retrieval mode: {mode}")
 
 
@@ -202,6 +205,8 @@ def retrieve_reranked_chunks(
     top_k: int = DEFAULT_TOP_K,
     candidate_k: int | None = None,
     reranker=None,
+    metadata_filters: dict | None = None,
+    user_roles=None,
 ):
     candidate_k = candidate_k or max(top_k * 3, top_k)
     candidates = retrieve_hybrid_chunks(
@@ -209,5 +214,7 @@ def retrieve_reranked_chunks(
         vectorstore=vectorstore,
         keyword_documents=keyword_documents,
         top_k=candidate_k,
+        metadata_filters=metadata_filters,
+        user_roles=user_roles,
     )
     return rerank_chunks(query=query, chunks=candidates, top_k=top_k, reranker=reranker)

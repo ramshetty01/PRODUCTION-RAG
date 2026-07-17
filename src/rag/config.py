@@ -26,7 +26,7 @@ class RuntimeSettings:
     chunk_size: int = DEFAULT_CHUNK_TOKENS
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP_TOKENS
     top_k: int = 4
-    retrieval_mode: str = "semantic"
+    retrieval_mode: str = "reranked"
     log_level: str = "INFO"
     conversation_max_turns: int = 6
     llm_provider: str = "extractive"
@@ -102,7 +102,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         chunk_size=_setting_int(dotenv_values, "RAG_CHUNK_SIZE", DEFAULT_CHUNK_TOKENS),
         chunk_overlap=_setting_int(dotenv_values, "RAG_CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP_TOKENS),
         top_k=_setting_int(dotenv_values, "RAG_TOP_K", 4),
-        retrieval_mode=_setting_value(dotenv_values, "RAG_RETRIEVAL_MODE", "semantic"),
+        retrieval_mode=_setting_value(dotenv_values, "RAG_RETRIEVAL_MODE", "reranked"),
         log_level=_setting_value(dotenv_values, "RAG_LOG_LEVEL", "INFO"),
         conversation_max_turns=_setting_int(dotenv_values, "RAG_CONVERSATION_MAX_TURNS", 6),
         llm_provider=_setting_value(dotenv_values, "RAG_LLM_PROVIDER", "extractive"),
