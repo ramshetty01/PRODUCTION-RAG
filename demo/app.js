@@ -34,9 +34,13 @@ const metricLatency = document.querySelector("#metricLatency");
 const metricStatus = document.querySelector("#metricStatus");
 const workspaceId = localStorage.getItem("rag_workspace_id") || crypto.randomUUID();
 const sessionId = localStorage.getItem("rag_session_id") || crypto.randomUUID();
+const savedAuthType = localStorage.getItem("rag_auth_type") || "none";
+const savedCredential = sessionStorage.getItem("rag_credential") || "";
 
 localStorage.setItem("rag_workspace_id", workspaceId);
 localStorage.setItem("rag_session_id", sessionId);
+authType.value = savedAuthType;
+credential.value = savedCredential;
 
 const scenarios = {
   vendor: {
@@ -60,6 +64,29 @@ function text(value) {
 function setStatus(label, variant = "") {
   apiStatus.textContent = label;
   apiStatus.className = `metric-value ${variant}`.trim();
+}
+
+function saveAuthState() {
+  localStorage.setItem("rag_auth_type", authType.value);
+  sessionStorage.setItem("rag_credential", credential.value.trim());
+}
+
+function authHeaders(base = {}) {
+  const headers = {...base};
+  const authValue = credential.value.trim();
+  if (authType.value === "api_key" && authValue) {
+    headers["X-API-Key"] = authValue;
+  }
+  if (authType.value === "bearer" && authValue) {
+    headers.Authorization = `Bearer ${authValue}`;
+  }
+  return headers;
+}
+
+function authErrorMessage(status, payload) {
+  if (status === 401) return "Sign in with a valid API key or bearer token.";
+  if (status === 403) return "Your current identity is not allowed to perform this action.";
+  return typeof payload.detail === "string" ? payload.detail : payload.detail?.message;
 }
 
 function renderCitations(items) {
@@ -239,7 +266,7 @@ async function postStandardQuery(headers, body) {
   });
   const payload = await response.json();
   if (!response.ok) {
-    const message = typeof payload.detail === "string" ? payload.detail : payload.detail?.message;
+    const message = authErrorMessage(response.status, payload);
     throw new Error(message || `HTTP ${response.status}`);
   }
   renderResult(payload);
@@ -308,14 +335,7 @@ async function askQuestion(event) {
   requestId.className = "pill muted";
   setStatus("Running");
 
-  const headers = {"Content-Type": "application/json"};
-  const authValue = credential.value.trim();
-  if (authType.value === "api_key" && authValue) {
-    headers["X-API-Key"] = authValue;
-  }
-  if (authType.value === "bearer" && authValue) {
-    headers.Authorization = `Bearer ${authValue}`;
-  }
+  const headers = authHeaders({"Content-Type": "application/json"});
 
   try {
     const body = queryBody();
@@ -344,6 +364,7 @@ async function askQuestion(event) {
 function applyAuthPreset(preset) {
   authType.value = "api_key";
   credential.value = preset === "admin" ? "admin-key" : "public-key";
+  saveAuthState();
   authBadge.textContent = preset === "admin" ? "api-key:admin- · admin|public" : "api-key:public · public";
 }
 
@@ -367,11 +388,12 @@ async function uploadDocument(event) {
   try {
     const response = await fetch("/upload", {
       method: "POST",
+      headers: authHeaders(),
       body,
     });
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.detail || `HTTP ${response.status}`);
+      throw new Error(authErrorMessage(response.status, payload) || `HTTP ${response.status}`);
     }
     uploadStatus.textContent = `${payload.chunks_created} chunks indexed`;
     await refreshDocuments();
@@ -400,6 +422,8 @@ document.querySelectorAll("[data-scenario]").forEach((button) => {
 document.querySelectorAll("[data-auth-preset]").forEach((button) => {
   button.addEventListener("click", () => applyAuthPreset(button.dataset.authPreset));
 });
+authType.addEventListener("change", saveAuthState);
+credential.addEventListener("input", saveAuthState);
 
 filterDocument.addEventListener("input", () => renderActiveFilters(selectedFilters()));
 filterType.addEventListener("change", () => renderActiveFilters(selectedFilters()));
