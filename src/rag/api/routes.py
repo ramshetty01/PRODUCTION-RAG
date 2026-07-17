@@ -196,6 +196,15 @@ class DocumentListResponse(BaseModel):
     documents: list[DocumentRecordResponse]
 
 
+class IndexReadinessResponse(BaseModel):
+    status: str
+    ready: bool
+    message: str
+    document_count: int
+    pending_jobs: int = 0
+    failed_jobs: int = 0
+
+
 class DeleteDocumentResponse(BaseModel):
     document_id: str
     status: str
@@ -281,6 +290,54 @@ def _get_ingestion_job(job_id: str) -> dict | None:
     with INGESTION_JOB_LOCK:
         job = INGESTION_JOBS.get(job_id)
         return dict(job) if job else None
+
+
+def _ingestion_jobs_for_workspace(workspace_id: str | None) -> list[dict]:
+    with INGESTION_JOB_LOCK:
+        jobs = [dict(job) for job in INGESTION_JOBS.values()]
+    if workspace_id:
+        return [job for job in jobs if job.get("workspace_id") == workspace_id]
+    return jobs
+
+
+def _index_readiness(workspace_id: str | None = None) -> IndexReadinessResponse:
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    documents = _document_records(safe_workspace_id)
+    jobs = _ingestion_jobs_for_workspace(safe_workspace_id)
+    pending_jobs = [job for job in jobs if job.get("status") in {"queued", "parsing", "chunking", "embedding"}]
+    failed_jobs = [job for job in jobs if job.get("status") == "failed"]
+    indexed_documents = [document for document in documents if document.get("status") in {"indexed", "skipped"}]
+
+    if failed_jobs:
+        return IndexReadinessResponse(
+            status="failed",
+            ready=False,
+            message="Indexing failed. Upload the corpus again.",
+            document_count=len(indexed_documents),
+            pending_jobs=len(pending_jobs),
+            failed_jobs=len(failed_jobs),
+        )
+    if pending_jobs:
+        return IndexReadinessResponse(
+            status="indexing",
+            ready=False,
+            message="Indexing corpus before chat is enabled.",
+            document_count=len(indexed_documents),
+            pending_jobs=len(pending_jobs),
+        )
+    if indexed_documents:
+        return IndexReadinessResponse(
+            status="ready",
+            ready=True,
+            message="Corpus indexed. You can ask questions.",
+            document_count=len(indexed_documents),
+        )
+    return IndexReadinessResponse(
+        status="empty",
+        ready=False,
+        message="Upload and index a corpus before asking.",
+        document_count=0,
+    )
 
 
 def _chunks_for_path(path: Path, document_version: str):
@@ -406,6 +463,7 @@ def _index_uploaded_file(
             job_id,
             status="indexed",
             progress=100,
+            workspace_id=safe_workspace_id or "default",
             chunks_created=len(chunks),
             vector_records=vector_records,
         )
@@ -756,7 +814,15 @@ async def upload_document(
     try:
         if background:
             job_id = new_request_id()
-            _set_ingestion_job(job_id, job_id=job_id, status="queued", progress=0, chunks_created=0)
+            _set_ingestion_job(
+                job_id,
+                job_id=job_id,
+                status="queued",
+                progress=0,
+                workspace_id=safe_workspace_id or "default",
+                filename=safe_name,
+                chunks_created=0,
+            )
             thread = threading.Thread(
                 target=_run_ingestion_job,
                 args=(job_id, saved_path, safe_name, safe_workspace_id, safe_access_roles),
@@ -795,6 +861,11 @@ def ingestion_job(job_id: str):
 @router.get("/documents", response_model=DocumentListResponse)
 def list_documents(workspace_id: str | None = None):
     return DocumentListResponse(documents=[DocumentRecordResponse(**record) for record in _document_records(workspace_id)])
+
+
+@router.get("/index-status", response_model=IndexReadinessResponse)
+def index_status(workspace_id: str | None = None):
+    return _index_readiness(workspace_id)
 
 
 @router.get("/admin/status", response_model=AdminStatusResponse)

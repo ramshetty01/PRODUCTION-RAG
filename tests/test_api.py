@@ -153,12 +153,15 @@ def test_demo_frontend_assets_are_served():
     assert "credential" in page.text
     assert "data-auth-preset=\"admin\"" in page.text
     assert "documentUpload" in page.text
+    assert "indexStatus" in page.text
     assert "evalFaithfulness" in page.text
     assert "/query" in script.text
     assert "/upload" in script.text
+    assert "/index-status?workspace_id=" in script.text
     assert "background" in script.text
     assert "/ingestion-jobs/" in script.text
     assert "pollIngestionJob" in script.text
+    assert "Upload and index a corpus before asking." in script.text
     assert "rag_workspace_id" in script.text
     assert "rag_session_id" in script.text
     assert "workspace_id" in script.text
@@ -354,6 +357,61 @@ def test_upload_endpoint_can_queue_background_ingestion(tmp_path, monkeypatch):
     assert status.json()["status"] == "indexed"
     assert status.json()["progress"] == 100
     assert status.json()["chunks_created"] > 0
+
+
+def test_index_status_reports_empty_ready_indexing_and_failed(tmp_path, monkeypatch):
+    routes.INGESTION_JOBS.clear()
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(manifest_path=str(manifest_path), vector_db_path=str(tmp_path / "chroma_db")),
+    )
+    client = TestClient(routes.create_app())
+
+    empty = client.get("/index-status", params={"workspace_id": "workspace-a"})
+    assert empty.status_code == 200
+    assert empty.json()["status"] == "empty"
+    assert empty.json()["ready"] is False
+
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "policy": {
+                        "document_id": "policy",
+                        "document_version": "v1",
+                        "filename": "policy.md",
+                        "workspace_id": "workspace-a",
+                        "status": "indexed",
+                        "chunk_count": 2,
+                        "source_path": str(tmp_path / "policy.md"),
+                        "ingested_at": "2026-07-18T00:00:00Z",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    ready = client.get("/index-status", params={"workspace_id": "workspace-a"})
+    assert ready.json()["status"] == "ready"
+    assert ready.json()["ready"] is True
+    assert ready.json()["document_count"] == 1
+
+    routes.INGESTION_JOBS["job-a"] = {"job_id": "job-a", "workspace_id": "workspace-b", "status": "embedding", "progress": 75}
+    indexing = client.get("/index-status", params={"workspace_id": "workspace-b"})
+    assert indexing.json()["status"] == "indexing"
+    assert indexing.json()["pending_jobs"] == 1
+    assert indexing.json()["ready"] is False
+
+    routes.INGESTION_JOBS["job-b"] = {"job_id": "job-b", "workspace_id": "workspace-c", "status": "failed", "progress": 100}
+    failed = client.get("/index-status", params={"workspace_id": "workspace-c"})
+    assert failed.json()["status"] == "failed"
+    assert failed.json()["failed_jobs"] == 1
+    assert failed.json()["ready"] is False
+    routes.INGESTION_JOBS.clear()
 
 
 def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypatch):
