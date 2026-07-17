@@ -198,16 +198,19 @@ p {
 
 .glass-stage {
   position: relative;
-  margin: 34px auto 22px;
-  width: min(1040px, calc(100% - 56px));
+  display: grid;
+  align-content: start;
+  min-height: 700px;
+  margin: 42px auto 26px;
+  width: min(960px, calc(100% - 56px));
   border: 1px solid var(--line-strong);
-  border-radius: 30px;
+  border-radius: 26px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03)),
     rgba(13, 30, 24, 0.66);
   box-shadow: var(--small-shadow);
   backdrop-filter: blur(24px);
-  padding: 46px;
+  padding: 54px 52px 36px;
 }
 
 .glass-stage::before,
@@ -254,16 +257,16 @@ h1 {
   margin-top: 12px;
   color: #fff;
   font-family: var(--font-heading);
-  font-size: max(3rem, 6.1433vw + 1.6945rem);
+  font-size: 4.75rem;
   font-weight: 300;
-  line-height: max(3rem, 6.1433vw + 1.6945rem);
-  letter-spacing: -0.132rem;
+  line-height: 0.96;
+  letter-spacing: 0;
   text-wrap: pretty;
 }
 
 .subtitle {
   width: min(700px, 100%);
-  margin-top: 16px;
+  margin-top: 18px;
   color: var(--soft);
   font: normal normal 400 1rem/1.5 var(--font-body);
   letter-spacing: -0.16px;
@@ -273,17 +276,17 @@ h1 {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin: 32px 0 24px;
+  margin: 42px 0 28px;
 }
 
 .scenario-row button {
-  min-height: 84px;
+  min-height: 78px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.13);
   color: #fff;
-  font: normal normal 300 1.25rem/1.2 var(--font-heading);
-  letter-spacing: -0.4px;
+  font: normal normal 300 1.125rem/1.25 var(--font-heading);
+  letter-spacing: 0;
   text-align: left;
   padding: 16px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -298,7 +301,7 @@ h1 {
 
 .query-form {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .auth-strip {
@@ -451,10 +454,10 @@ select:focus {
 
 .upload-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 108px minmax(128px, 0.35fr);
+  grid-template-columns: minmax(0, 1fr) 108px minmax(128px, 0.35fr) minmax(190px, 0.5fr);
   gap: 10px;
   align-items: end;
-  margin-top: 10px;
+  margin-top: 18px;
 }
 
 .upload-drop {
@@ -744,7 +747,8 @@ h3 {
 
 @media (min-width: 94.5rem) {
   h1 {
-    letter-spacing: -0.465rem;
+    font-size: 5rem;
+    letter-spacing: 0;
   }
 
   .answer-surface p {
@@ -779,8 +783,14 @@ h3 {
   }
 
   .glass-stage {
+    min-height: auto;
     width: calc(100% - 28px);
     padding: 30px;
+  }
+
+  h1 {
+    font-size: 3.5rem;
+    line-height: 0.98;
   }
 
   .scenario-row,
@@ -818,8 +828,8 @@ h3 {
   }
 
   h1 {
-    font-size: 3rem;
-    line-height: 3rem;
+    font-size: 2.75rem;
+    line-height: 1;
   }
 
   .answer-surface p {
