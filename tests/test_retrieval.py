@@ -376,6 +376,43 @@ def test_retrieve_reranked_chunks_reranks_hybrid_candidates():
     assert results == [strong]
 
 
+def test_reranked_mode_improves_over_semantic_baseline():
+    weak = make_doc("Build automation uses workflows.", "docs:p0:c5")
+    strong = make_doc("A runner executes jobs on a machine.", "docs:p0:c6")
+    vectorstore = FakeVectorStore([weak, strong])
+
+    baseline = retrieve_by_mode("runner executes jobs", "semantic", vectorstore=vectorstore, top_k=1)
+    reranked = retrieve_by_mode(
+        "runner executes jobs",
+        "reranked",
+        vectorstore=vectorstore,
+        documents=[weak, strong],
+        top_k=1,
+        reranker=LexicalReranker(),
+    )
+
+    assert baseline == [weak]
+    assert reranked == [strong]
+
+
+def test_reranked_mode_filters_before_final_top_k():
+    private = make_doc("Private payroll data.", "secret:p0:c0", document_id="secret", access_roles=["admin"])
+    public = make_doc("A runner executes jobs on a machine.", "docs:p0:c6", access_roles=["public"])
+    vectorstore = FakeVectorStore([private, public])
+
+    reranked = retrieve_by_mode(
+        "runner executes jobs",
+        "reranked",
+        vectorstore=vectorstore,
+        documents=[private, public],
+        top_k=1,
+        reranker=LexicalReranker(),
+        user_roles=["public"],
+    )
+
+    assert reranked == [public]
+
+
 def test_cross_encoder_reranker_scores_query_document_pairs():
     class FakeCrossEncoder:
         def __init__(self):

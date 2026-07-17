@@ -404,8 +404,8 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["answer"] == "A runner executes jobs. [docs:p2:c3]"
     assert body["citations"][0]["id"] == "docs:p2:c3"
     assert body["retrieval"] == {
-        "mode": "semantic",
-        "requested_mode": "semantic",
+        "mode": "reranked",
+        "requested_mode": "reranked",
         "strategy_reason": "explicit retrieval mode",
         "top_k": 2,
         "returned_chunks": 1,
@@ -447,10 +447,11 @@ def test_query_endpoint_uses_session_history_for_follow_up_retrieval(monkeypatch
     assert first.status_code == 200
     assert second.status_code == 200
     assert RecordingVectorStore.queries[0] == "What does a runner do?"
-    assert RecordingVectorStore.queries[1] == (
+    rewritten_query = (
         "Conversation context: What does a runner do?. Follow-up question: What about its schedule?"
     )
-    assert "A runner executes jobs." not in RecordingVectorStore.queries[1]
+    assert rewritten_query in RecordingVectorStore.queries
+    assert all("A runner executes jobs." not in query for query in RecordingVectorStore.queries)
     body = second.json()
     assert body["retrieval"]["conversation_turns"] == 1
     assert body["trace"]["original_query"] == "What about its schedule?"
@@ -524,7 +525,7 @@ def test_query_endpoint_records_opentelemetry_stage_spans(monkeypatch):
     assert "rag.citation_enforcement" in span_names
     retrieval = next(attributes for name, attributes in telemetry.spans if name == "rag.retrieval")
     assert retrieval["rag.top_k"] == 2
-    assert retrieval["rag.retrieval_mode"] == "semantic"
+    assert retrieval["rag.retrieval_mode"] == "reranked"
 
 
 def test_query_endpoint_rejects_prompt_injection():

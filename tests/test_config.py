@@ -35,7 +35,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     settings = load_settings(dotenv_path=None)
 
     assert settings.top_k == 4
-    assert settings.retrieval_mode == "semantic"
+    assert settings.retrieval_mode == "reranked"
     assert settings.conversation_max_turns == 6
     assert settings.vector_backend == "chroma"
     assert settings.vector_collection == "rag_chunks"
@@ -63,6 +63,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
 def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     for key in [
         "RAG_TOP_K",
+        "RAG_RETRIEVAL_MODE",
         "RAG_LLM_PROVIDER",
         "RAG_LLM_ENDPOINT",
         "RAG_LLM_TIMEOUT_SECONDS",
