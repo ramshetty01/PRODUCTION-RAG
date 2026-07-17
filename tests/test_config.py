@@ -6,6 +6,8 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_TOP_K",
         "RAG_RETRIEVAL_MODE",
         "RAG_CONVERSATION_MAX_TURNS",
+        "RAG_RETENTION_DAYS",
+        "RAG_RETENTION_PURGE_LOGS",
         "RAG_VECTOR_BACKEND",
         "RAG_VECTOR_COLLECTION",
         "RAG_QDRANT_URL",
@@ -37,6 +39,8 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.top_k == 4
     assert settings.retrieval_mode == "reranked"
     assert settings.conversation_max_turns == 6
+    assert settings.retention_days == 30
+    assert settings.retention_purge_logs is True
     assert settings.vector_backend == "chroma"
     assert settings.vector_collection == "rag_chunks"
     assert settings.qdrant_url == ""
@@ -85,6 +89,8 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_TOP_K=6",
                 "RAG_RETRIEVAL_MODE=hybrid",
                 "RAG_CONVERSATION_MAX_TURNS=4",
+                "RAG_RETENTION_DAYS=7",
+                "RAG_RETENTION_PURGE_LOGS=false",
                 "RAG_LLM_PROVIDER=openai",
                 "RAG_LLM_ENDPOINT=http://localhost:11434/v1/chat/completions",
                 "RAG_LLM_TIMEOUT_SECONDS=5",
@@ -121,6 +127,8 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.top_k == 6
     assert settings.retrieval_mode == "hybrid"
     assert settings.conversation_max_turns == 4
+    assert settings.retention_days == 7
+    assert settings.retention_purge_logs is False
     assert settings.llm_provider == "openai"
     assert settings.llm_endpoint == "http://localhost:11434/v1/chat/completions"
     assert settings.llm_timeout_seconds == 5
@@ -154,6 +162,8 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_TOP_K=" in env_example
     assert "RAG_RETRIEVAL_MODE=" in env_example
     assert "RAG_CONVERSATION_MAX_TURNS=" in env_example
+    assert "RAG_RETENTION_DAYS=" in env_example
+    assert "RAG_RETENTION_PURGE_LOGS=" in env_example
     assert "RAG_LLM_PROVIDER=" in env_example
     assert "RAG_LLM_ENDPOINT=" in env_example
     assert "RAG_LLM_TIMEOUT_SECONDS=" in env_example

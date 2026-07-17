@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import time
 from pathlib import Path
 
@@ -187,6 +188,15 @@ class DeleteDocumentResponse(BaseModel):
     vector_records_deleted: int | None = None
 
 
+class PurgeWorkspaceResponse(BaseModel):
+    workspace_id: str
+    documents_deleted: int
+    files_deleted: int
+    vector_records_deleted: int | None
+    conversations_deleted: int
+    logs_deleted: int
+
+
 class AdminStatusResponse(BaseModel):
     health: dict
     index: dict
@@ -314,6 +324,19 @@ def _document_records(workspace_id: str | None = None) -> list[dict]:
     if safe_workspace_id:
         records = [record for record in records if record.get("workspace_id") == safe_workspace_id]
     return sorted(records, key=lambda record: record.get("ingested_at") or "", reverse=True)
+
+
+def _purge_logs() -> int:
+    logs_dir = _safe_api_path(PROJECT_ROOT / "logs")
+    if logs_dir.is_dir():
+        shutil.rmtree(logs_dir)
+        return 1
+    deleted = 0
+    for path in [_safe_api_path(DEFAULT_FEEDBACK_LOG), _safe_api_path(DEFAULT_AUDIT_LOG)]:
+        if path.is_file():
+            path.unlink()
+            deleted += 1
+    return deleted
 
 
 def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_context: AuthContext):
@@ -716,6 +739,48 @@ def delete_document(
         document_id=document_id,
         status="deleted",
         vector_records_deleted=deleted_records,
+    )
+
+
+@router.post("/workspaces/{workspace_id}/purge", response_model=PurgeWorkspaceResponse)
+def purge_workspace(
+    workspace_id: str,
+    persist_dir: str | None = None,
+    auth_context: AuthContext = Depends(_admin_context),
+):
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    if safe_workspace_id is None:
+        raise HTTPException(status_code=400, detail="workspace_id is required")
+
+    manifest_path = _document_manifest_path()
+    manifest = load_manifest(manifest_path)
+    records = [
+        record
+        for record in manifest.get("documents", {}).values()
+        if record.get("workspace_id") == safe_workspace_id
+    ]
+
+    vectorstore = load_vectorstore(_safe_api_path(persist_dir or SETTINGS.vector_db_path), settings=SETTINGS)
+    deleted_records = delete_records_by_metadata(vectorstore, {"workspace_id": safe_workspace_id})
+    files_deleted = 0
+    for record in records:
+        source_path = _safe_api_path(record["source_path"])
+        if source_path.exists():
+            source_path.unlink()
+            files_deleted += 1
+        manifest["documents"].pop(record["document_id"], None)
+
+    save_manifest(manifest, manifest_path)
+    _clear_query_cache()
+    conversations_deleted = CONVERSATION_MEMORY.clear_workspace(safe_workspace_id)
+    logs_deleted = _purge_logs() if SETTINGS.retention_purge_logs else 0
+    return PurgeWorkspaceResponse(
+        workspace_id=safe_workspace_id,
+        documents_deleted=len(records),
+        files_deleted=files_deleted,
+        vector_records_deleted=deleted_records,
+        conversations_deleted=conversations_deleted,
+        logs_deleted=logs_deleted,
     )
 
 
