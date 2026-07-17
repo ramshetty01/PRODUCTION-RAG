@@ -401,8 +401,10 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["request_id"]
-    assert body["answer"] == "A runner executes jobs. [docs:p2:c3]"
+    assert body["answer"] == "A runner executes jobs. [1]"
     assert body["citations"][0]["id"] == "docs:p2:c3"
+    assert body["citations"][0]["label"] == "docs.pdf, page 2"
+    assert body["citations"][0]["snippet"] == "A runner executes jobs."
     assert body["quality"]["status"] == "passed"
     assert body["quality"]["citation_coverage"] == 1.0
     assert body["quality"]["evidence_support"] == 1.0
@@ -425,6 +427,7 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["trace"]["original_query"] == "What does a runner do?"
     assert body["trace"]["rewritten_query"] == "What does a runner do?"
     assert body["trace"]["retrieved_chunk_ids"] == ["docs:p2:c3"]
+    assert body["trace"]["answer"] == "A runner executes jobs. [docs:p2:c3]"
     assert body["trace"]["citations"] == ["docs:p2:c3"]
     assert body["trace"]["latency_ms"] >= 0
     assert body["trace"]["token_usage"]["answer_tokens"] > 0

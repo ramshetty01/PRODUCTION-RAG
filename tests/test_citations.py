@@ -26,10 +26,12 @@ def test_citation_records_locate_source_page_and_chunk():
     citation = citation_for_chunk(chunk)
 
     assert citation["id"] == "docs:p0:c0"
+    assert citation["label"] == "docs.pdf, page 0"
     assert citation["source"] == "docs.pdf"
     assert citation["source_path"] == "/tmp/docs.pdf"
     assert citation["page"] == 0
     assert citation["chunk_index"] == 0
+    assert citation["snippet"] == "GitHub Actions runs workflows on runners."
     assert citation["quote"] == "GitHub Actions runs workflows on runners."
 
 

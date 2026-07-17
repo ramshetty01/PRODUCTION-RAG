@@ -78,8 +78,8 @@ function renderCitations(items) {
     const citation = document.createElement("article");
     citation.className = "citation";
     citation.innerHTML = `
-      <strong>${text(item.id)} · page ${text(item.page)}</strong>
-      <p>${text(item.quote)}</p>
+      <strong>${text(item.label || item.source)} </strong>
+      <p>${text(item.snippet || item.quote)}</p>
     `;
     citations.append(citation);
   }

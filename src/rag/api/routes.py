@@ -38,6 +38,7 @@ from src.rag.observability import (
     trace_latency,
 )
 from src.rag.performance import build_query_cache, estimate_llm_cost
+from src.rag.citations import productize_answer_citations, productize_citations
 from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode, select_retrieval_strategy
 from src.rag.runtime_quality import score_runtime_answer
@@ -89,10 +90,12 @@ class QueryRequest(BaseModel):
 
 class CitationResponse(BaseModel):
     id: str
+    label: str
     source: str
     source_path: str
     page: int | None
     chunk_index: int | None
+    snippet: str
     quote: str
 
 
@@ -389,13 +392,15 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                 event.answer = response["answer"]
                 event.citations = citation_ids(response["citations"])
             quality = score_runtime_answer(response["answer"], chunks)
+            response["citations"] = productize_citations(response["citations"])
+            visible_answer = productize_answer_citations(response["answer"], response["citations"])
             if not quality.passed:
-                response["answer"] = f"{response['answer']}\n\nQuality warning: {'; '.join(quality.reasons)}"
+                visible_answer = f"{visible_answer}\n\nQuality warning: {'; '.join(quality.reasons)}"
             event.token_usage = response.get("token_usage", {})
             event.token_usage["estimated_cost"] = estimate_llm_cost(event.token_usage)
         payload = {
             "request_id": request_id,
-            "answer": response["answer"],
+            "answer": visible_answer,
             "citations": response["citations"],
             "quality": quality.to_dict(),
             "retrieval": {
