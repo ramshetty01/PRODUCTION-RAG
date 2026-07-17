@@ -108,6 +108,87 @@ function renderError(error) {
   cacheBadge.className = "pill error";
 }
 
+function queryBody() {
+  return {
+    query: queryInput.value.trim(),
+    workspace_id: workspaceId,
+    retrieval_mode: retrievalMode.value,
+    top_k: Number(topK.value),
+  };
+}
+
+function parseSseMessage(message) {
+  const event = {type: "message", data: ""};
+  for (const line of message.split("\n")) {
+    if (line.startsWith("event:")) {
+      event.type = line.slice("event:".length).trim();
+    }
+    if (line.startsWith("data:")) {
+      event.data += line.slice("data:".length).trim();
+    }
+  }
+  return event;
+}
+
+async function readStreamingAnswer(response) {
+  if (!response.body) {
+    throw new Error("Streaming is unavailable");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalPayload = null;
+  answerText.textContent = "";
+  renderCitations([]);
+
+  while (true) {
+    const {value, done} = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, {stream: true});
+    const messages = buffer.split("\n\n");
+    buffer = messages.pop() || "";
+
+    for (const message of messages) {
+      if (!message.trim()) {
+        continue;
+      }
+      const event = parseSseMessage(message);
+      const data = event.data ? JSON.parse(event.data) : {};
+      if (event.type === "token") {
+        answerText.textContent += data.text || "";
+      }
+      if (event.type === "complete") {
+        finalPayload = data;
+      }
+      if (event.type === "error") {
+        throw new Error(data.message || `HTTP ${data.status_code || 500}`);
+      }
+    }
+  }
+
+  if (!finalPayload) {
+    throw new Error("Streaming response ended without completion");
+  }
+  renderResult(finalPayload);
+}
+
+async function postStandardQuery(headers, body) {
+  const response = await fetch("/query", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    const message = typeof payload.detail === "string" ? payload.detail : payload.detail?.message;
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+  renderResult(payload);
+}
+
 function parseMetric(body, metricName) {
   const match = body.match(new RegExp(`^${metricName}\\\\s+([^\\\\n]+)$`, "m"));
   return match ? match[1] : "0";
@@ -181,24 +262,18 @@ async function askQuestion(event) {
   }
 
   try {
-    const response = await fetch("/query", {
+    const body = queryBody();
+    const response = await fetch("/query/stream", {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        query: queryInput.value.trim(),
-        workspace_id: workspaceId,
-        retrieval_mode: retrievalMode.value,
-        top_k: Number(topK.value),
-      }),
+      body: JSON.stringify(body),
     });
-    const payload = await response.json();
-
     if (!response.ok) {
-      const message = typeof payload.detail === "string" ? payload.detail : payload.detail?.message;
-      throw new Error(message || `HTTP ${response.status}`);
+      await postStandardQuery(headers, body);
+    } else {
+      await readStreamingAnswer(response);
     }
 
-    renderResult(payload);
     setStatus("Online");
   } catch (error) {
     renderError(error.message);

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
+import re
 import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
@@ -280,6 +282,112 @@ def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_c
     )
 
 
+def _build_query_payload(request: QueryRequest, auth_context: AuthContext, request_id: str) -> dict:
+    try:
+        safe_query = validate_query(request.query)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    requested_mode = request.retrieval_mode.lower()
+    if requested_mode not in SUPPORTED_RETRIEVAL_MODES:
+        raise HTTPException(status_code=400, detail=f"Unsupported retrieval mode: {request.retrieval_mode}")
+    if not RATE_LIMITER.allow("default"):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
+
+    event = TraceEvent(request_id=request_id, query=safe_query)
+    cache_filters = {
+        **_effective_metadata_filters(request),
+        "_retrieval_mode": requested_mode,
+        "_auth_scope": auth_context.cache_scope(),
+    }
+    with OTEL.span(
+        "rag.cache",
+        {
+            "rag.request_id": request_id,
+            "rag.retrieval_mode": requested_mode,
+            "rag.top_k": request.top_k,
+        },
+    ):
+        cached_payload = QUERY_CACHE.get(safe_query, request.top_k, cache_filters)
+    if cached_payload:
+        with OTEL.span("rag.cache.hit", {"rag.request_id": request_id, "rag.cache_hit": True}):
+            pass
+        cached_payload = {**cached_payload, "request_id": request_id, "cached": True}
+        cached_payload["trace"] = {**cached_payload["trace"], "request_id": request_id}
+        return cached_payload
+
+    try:
+        with trace_latency(event):
+            vectorstore = load_vectorstore(_safe_api_path(request.persist_dir), settings=SETTINGS)
+            with OTEL.span(
+                "rag.retrieval",
+                {
+                    "rag.request_id": request_id,
+                    "rag.retrieval_mode": requested_mode,
+                    "rag.top_k": request.top_k,
+                },
+            ):
+                retrieval_mode, chunks = _retrieve_for_request(
+                    safe_query,
+                    request,
+                    vectorstore,
+                    auth_context,
+                )
+            if retrieval_mode == "reranked":
+                with OTEL.span("rag.reranking", {"rag.request_id": request_id, "rag.returned_chunks": len(chunks)}):
+                    pass
+            with OTEL.span(
+                "rag.generation",
+                {
+                    "rag.request_id": request_id,
+                    "rag.retrieved_chunks": len(chunks),
+                },
+            ):
+                response = generate_answer(safe_query, chunks)
+            with OTEL.span(
+                "rag.citation_enforcement",
+                {
+                    "rag.request_id": request_id,
+                    "rag.citation_count": len(response["citations"]),
+                },
+            ):
+                event.retrieved_chunk_ids = chunk_ids(chunks)
+                event.answer = response["answer"]
+                event.citations = citation_ids(response["citations"])
+            event.token_usage = response.get("token_usage", {})
+            event.token_usage["estimated_cost"] = estimate_llm_cost(event.token_usage)
+        payload = {
+            "request_id": request_id,
+            "answer": response["answer"],
+            "citations": response["citations"],
+            "retrieval": {
+                "mode": retrieval_mode,
+                "top_k": request.top_k,
+                "returned_chunks": len(chunks),
+                "chunk_ids": [chunk.metadata.get("chunk_id") for chunk in chunks],
+                "auth_subject": auth_context.subject,
+                "auth_roles": sorted(auth_context.roles),
+                "tenant_id": auth_context.tenant_id,
+            },
+            "trace": event.to_log_dict(),
+            "cached": False,
+        }
+        QUERY_CACHE.set(safe_query, request.top_k, payload, cache_filters)
+        return payload
+    except HTTPException:
+        raise
+    except Exception as exc:
+        event.error = type(exc).__name__
+        raise HTTPException(status_code=400, detail={"message": str(exc), "trace": event.to_log_dict()}) from exc
+
+
+def _sse(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+def _answer_stream_chunks(answer: str):
+    return re.findall(r"\S+\s*", answer)
+
+
 @router.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(status="ok")
@@ -505,101 +613,25 @@ def reindex_document(document_id: str, workspace_id: str | None = None, persist_
 @router.post("/query", response_model=QueryResponse)
 def query(request: QueryRequest, auth_context: AuthContext = Depends(_auth_context)):
     request_id = new_request_id()
-    try:
-        safe_query = validate_query(request.query)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    requested_mode = request.retrieval_mode.lower()
-    if requested_mode not in SUPPORTED_RETRIEVAL_MODES:
-        raise HTTPException(status_code=400, detail=f"Unsupported retrieval mode: {request.retrieval_mode}")
-    if not RATE_LIMITER.allow("default"):
-        raise HTTPException(status_code=429, detail="rate limit exceeded")
+    return QueryResponse(**_build_query_payload(request, auth_context, request_id))
 
-    event = TraceEvent(request_id=request_id, query=safe_query)
-    cache_filters = {
-        **_effective_metadata_filters(request),
-        "_retrieval_mode": requested_mode,
-        "_auth_scope": auth_context.cache_scope(),
-    }
-    with OTEL.span(
-        "rag.cache",
-        {
-            "rag.request_id": request_id,
-            "rag.retrieval_mode": requested_mode,
-            "rag.top_k": request.top_k,
-        },
-    ):
-        cached_payload = QUERY_CACHE.get(safe_query, request.top_k, cache_filters)
-    if cached_payload:
-        with OTEL.span("rag.cache.hit", {"rag.request_id": request_id, "rag.cache_hit": True}):
-            pass
-        cached_payload = {**cached_payload, "request_id": request_id, "cached": True}
-        cached_payload["trace"] = {**cached_payload["trace"], "request_id": request_id}
-        return QueryResponse(**cached_payload)
 
-    try:
-        with trace_latency(event):
-            vectorstore = load_vectorstore(_safe_api_path(request.persist_dir), settings=SETTINGS)
-            with OTEL.span(
-                "rag.retrieval",
-                {
-                    "rag.request_id": request_id,
-                    "rag.retrieval_mode": requested_mode,
-                    "rag.top_k": request.top_k,
-                },
-            ):
-                retrieval_mode, chunks = _retrieve_for_request(
-                    safe_query,
-                    request,
-                    vectorstore,
-                    auth_context,
-                )
-            if retrieval_mode == "reranked":
-                with OTEL.span("rag.reranking", {"rag.request_id": request_id, "rag.returned_chunks": len(chunks)}):
-                    pass
-            with OTEL.span(
-                "rag.generation",
-                {
-                    "rag.request_id": request_id,
-                    "rag.retrieved_chunks": len(chunks),
-                },
-            ):
-                response = generate_answer(safe_query, chunks)
-            with OTEL.span(
-                "rag.citation_enforcement",
-                {
-                    "rag.request_id": request_id,
-                    "rag.citation_count": len(response["citations"]),
-                },
-            ):
-                event.retrieved_chunk_ids = chunk_ids(chunks)
-                event.answer = response["answer"]
-                event.citations = citation_ids(response["citations"])
-            event.token_usage = response.get("token_usage", {})
-            event.token_usage["estimated_cost"] = estimate_llm_cost(event.token_usage)
-        payload = {
-            "request_id": request_id,
-            "answer": response["answer"],
-            "citations": response["citations"],
-            "retrieval": {
-                "mode": retrieval_mode,
-                "top_k": request.top_k,
-                "returned_chunks": len(chunks),
-                "chunk_ids": [chunk.metadata.get("chunk_id") for chunk in chunks],
-                "auth_subject": auth_context.subject,
-                "auth_roles": sorted(auth_context.roles),
-                "tenant_id": auth_context.tenant_id,
-            },
-            "trace": event.to_log_dict(),
-            "cached": False,
-        }
-        QUERY_CACHE.set(safe_query, request.top_k, payload, cache_filters)
-        return QueryResponse(**payload)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        event.error = type(exc).__name__
-        raise HTTPException(status_code=400, detail={"message": str(exc), "trace": event.to_log_dict()}) from exc
+@router.post("/query/stream")
+def query_stream(request: QueryRequest, auth_context: AuthContext = Depends(_auth_context)):
+    request_id = new_request_id()
+
+    def stream_events():
+        try:
+            payload = _build_query_payload(request, auth_context, request_id)
+            yield _sse("start", {"request_id": request_id, "cached": payload.get("cached", False)})
+            for chunk in _answer_stream_chunks(payload["answer"]):
+                yield _sse("token", {"text": chunk})
+            yield _sse("complete", payload)
+        except HTTPException as exc:
+            detail = exc.detail if isinstance(exc.detail, str) else exc.detail.get("message", str(exc.detail))
+            yield _sse("error", {"status_code": exc.status_code, "message": detail})
+
+    return StreamingResponse(stream_events(), media_type="text/event-stream")
 
 
 @router.post("/feedback", response_model=FeedbackResponse)

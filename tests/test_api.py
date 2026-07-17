@@ -117,6 +117,7 @@ def test_demo_frontend_assets_are_served():
     assert "rag_workspace_id" in script.text
     assert "workspace_id" in script.text
     assert "/documents?workspace_id=" in script.text
+    assert "/query/stream" in script.text
     assert "/evaluation" in script.text
     assert "Authorization" in script.text
     assert "X-API-Key" in script.text
@@ -368,6 +369,23 @@ def test_query_endpoint_returns_answer_citations_and_retrieval(monkeypatch):
     assert body["trace"]["latency_ms"] >= 0
     assert body["trace"]["token_usage"]["answer_tokens"] > 0
     assert body["cached"] is False
+
+
+def test_query_stream_endpoint_emits_tokens_and_final_payload(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    with client.stream("POST", "/query/stream", json={"query": "What does a runner do?", "top_k": 2}) as response:
+        body = response.read().decode("utf-8")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: start" in body
+    assert 'event: token\ndata: {"text": "A ' in body
+    assert "event: complete" in body
+    assert '"answer": "A runner executes jobs. [docs:p2:c3]"' in body
+    assert '"citations": [{"id": "docs:p2:c3"' in body
 
 
 def test_query_endpoint_records_opentelemetry_stage_spans(monkeypatch):
