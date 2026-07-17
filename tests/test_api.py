@@ -198,6 +198,10 @@ def test_demo_frontend_assets_are_served():
     assert ".workspace" in styles.text
     assert ".auth-strip" in styles.text
     assert ".upload-form" in styles.text
+    assert "min-height: 700px" in styles.text
+    assert "width: min(960px, calc(100% - 56px))" in styles.text
+    assert "grid-template-columns: minmax(0, 1fr) 108px minmax(128px, 0.35fr) minmax(190px, 0.5fr)" in styles.text
+    assert "font-size: 4.75rem" in styles.text
     assert ".citation-detail" in styles.text
     assert "/demo/fonts/KMR_Apparat_Light.woff2" in styles.text
     assert "https://spur.us" not in styles.text
