@@ -45,6 +45,13 @@ class ConversationMemoryStore:
     def clear(self) -> None:
         self.values.clear()
 
+    def clear_workspace(self, workspace_id: str | None) -> int:
+        prefix = f"{workspace_id or 'default'}|"
+        keys = [key for key in self.values if key.startswith(prefix)]
+        for key in keys:
+            del self.values[key]
+        return len(keys)
+
 
 def build_contextual_query(query: str, turns: list[ConversationTurn], max_turns: int = 3) -> str:
     clean_query = " ".join(query.split())

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -427,6 +428,79 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
         "vector_records_deleted": 3,
     }
     assert not source.exists()
+
+
+def test_workspace_purge_deletes_documents_vectors_chats_and_logs(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "policy.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Policy", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        """
+{
+  "documents": {
+    "policy": {
+      "chunk_count": 1,
+      "content_hash": "hash",
+      "document_id": "policy",
+      "document_version": "v1",
+      "error": null,
+      "filename": "policy.md",
+      "ingested_at": "2026-07-17T00:00:00Z",
+      "previous_version": null,
+      "source_path": "%s",
+      "status": "indexed",
+      "workspace_id": "workspace-a"
+    }
+  }
+}
+"""
+        % source,
+        encoding="utf-8",
+    )
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "feedback.jsonl").write_text("x\n", encoding="utf-8")
+    routes.CONVERSATION_MEMORY.values["workspace-a|s|dev"] = []
+
+    class FakeCollection:
+        def __init__(self):
+            self.count_value = 4
+
+        def count(self):
+            return self.count_value
+
+        def delete(self, where):
+            assert where == {"workspace_id": "workspace-a"}
+            self.count_value = 1
+
+    class FakeVectorStore:
+        def __init__(self):
+            self._collection = FakeCollection()
+
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(manifest_path=str(manifest_path), vector_db_path=str(tmp_path / "chroma_db")),
+    )
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    response = client.post("/workspaces/workspace-a/purge", headers={"X-API-Key": "admin-key"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["documents_deleted"] == 1
+    assert body["files_deleted"] == 1
+    assert body["vector_records_deleted"] == 3
+    assert body["conversations_deleted"] == 1
+    assert body["logs_deleted"] == 1
+    assert not source.exists()
+    assert not logs.exists()
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["documents"] == {}
 
 
 def test_query_endpoint_isolates_results_by_workspace(monkeypatch):

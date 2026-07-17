@@ -29,6 +29,8 @@ class RuntimeSettings:
     retrieval_mode: str = "reranked"
     log_level: str = "INFO"
     conversation_max_turns: int = 6
+    retention_days: int = 30
+    retention_purge_logs: bool = True
     llm_provider: str = "extractive"
     llm_model: str = ""
     llm_api_key: str = ""
@@ -105,6 +107,8 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         retrieval_mode=_setting_value(dotenv_values, "RAG_RETRIEVAL_MODE", "reranked"),
         log_level=_setting_value(dotenv_values, "RAG_LOG_LEVEL", "INFO"),
         conversation_max_turns=_setting_int(dotenv_values, "RAG_CONVERSATION_MAX_TURNS", 6),
+        retention_days=_setting_int(dotenv_values, "RAG_RETENTION_DAYS", 30),
+        retention_purge_logs=_setting_bool(dotenv_values, "RAG_RETENTION_PURGE_LOGS", True),
         llm_provider=_setting_value(dotenv_values, "RAG_LLM_PROVIDER", "extractive"),
         llm_model=_setting_value(dotenv_values, "RAG_LLM_MODEL", ""),
         llm_api_key=_setting_value(dotenv_values, "RAG_LLM_API_KEY", ""),
