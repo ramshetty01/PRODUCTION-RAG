@@ -169,6 +169,10 @@ def test_demo_frontend_assets_are_served():
     assert "/evaluation" in script.text
     assert "Authorization" in script.text
     assert "X-API-Key" in script.text
+    assert "rag_auth_type" in script.text
+    assert "sessionStorage" in script.text
+    assert "authHeaders" in script.text
+    assert "Sign in with a valid API key or bearer token." in script.text
     assert "citation-toggle" in script.text
     assert "citation-detail" in script.text
     assert "Open source" in script.text

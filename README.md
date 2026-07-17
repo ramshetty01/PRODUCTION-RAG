@@ -87,6 +87,11 @@ curl -X POST http://localhost:8000/upload \
 The local demo at `http://localhost:8000/demo` includes the same upload flow
 and clears the query cache after a successful index.
 
+The demo supports dev-public, API-key, and bearer-token auth modes. Query and
+upload requests attach the selected credential, and the browser stores only the
+selected auth mode in local storage while keeping the credential in session
+storage.
+
 Supported upload parsers:
 
 | Type | Extensions | Notes |
