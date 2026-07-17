@@ -9,6 +9,8 @@ const auditEvents = document.querySelector("#auditEvents");
 const auditCsv = document.querySelector("#auditCsv");
 const feedbackEvents = document.querySelector("#feedbackEvents");
 const feedbackCsv = document.querySelector("#feedbackCsv");
+const dashboard = document.querySelector("#observabilityDashboard");
+const dashboardWindow = document.querySelector("#dashboardWindow");
 
 function headers() {
   return credential.value.trim() ? {"X-API-Key": credential.value.trim()} : {};
@@ -41,12 +43,23 @@ async function adminRequest(path, options = {}) {
 async function load() {
   statusText.textContent = "Loading";
   const payload = await adminRequest("/admin/status");
+  const observability = await adminRequest("/observability/dashboard?window_minutes=60");
   const audit = await adminRequest("/audit");
   const feedback = await adminRequest("/feedback/events");
   health.textContent = `API ${payload.health.api}`;
   index.textContent = `${payload.index.document_count} docs`;
   failures.textContent = `${payload.failed_jobs.length} failures`;
   documents.innerHTML = payload.documents.length ? payload.documents.map(row).join("") : "<p>No documents indexed.</p>";
+  dashboardWindow.textContent = `${observability.window.minutes} min`;
+  dashboard.innerHTML = [
+    ["Requests", observability.metrics.request_count],
+    ["Avg latency", `${observability.request_latency.avg_ms} ms`],
+    ["P95 latency", `${observability.request_latency.p95_ms} ms`],
+    ["Retrieval chunks", observability.retrieval.total_chunks],
+    ["Index health", observability.index_health.status],
+    ["Model errors", observability.model.errors],
+    ["Ingestion failures", observability.ingestion.failed_jobs + observability.ingestion.failed_documents],
+  ].map(([label, value]) => `<div class="admin-row"><strong>${label}</strong><span>${value}</span></div>`).join("");
   auditCsv.href = "/audit?format=csv";
   auditEvents.innerHTML = audit.events.length
     ? audit.events.map((event) => `<div class="admin-row"><div><strong>${event.user}</strong><span>${event.query}</span></div><span>${event.latency_ms || 0} ms</span></div>`).join("")
