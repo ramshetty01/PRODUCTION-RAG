@@ -77,10 +77,28 @@ function renderCitations(items) {
   for (const item of items) {
     const citation = document.createElement("article");
     citation.className = "citation";
+    citation.tabIndex = 0;
     citation.innerHTML = `
-      <strong>${text(item.label || item.source)} </strong>
-      <p>${text(item.snippet || item.quote)}</p>
+      <button type="button" class="citation-toggle" aria-expanded="false">
+        <strong>${text(item.label || item.source)} </strong>
+        <span>${text(item.snippet || item.quote)}</span>
+      </button>
+      <div class="citation-detail" hidden>
+        <dl>
+          <div><dt>Source</dt><dd>${text(item.source)}</dd></div>
+          <div><dt>Page</dt><dd>${text(item.page)}</dd></div>
+        </dl>
+        <p>${text(item.context || item.quote)}</p>
+        ${item.source_url ? `<a href="${item.source_url}" target="_blank" rel="noreferrer">Open source</a>` : ""}
+      </div>
     `;
+    const toggle = citation.querySelector(".citation-toggle");
+    const detail = citation.querySelector(".citation-detail");
+    toggle.addEventListener("click", () => {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      detail.hidden = expanded;
+    });
     citations.append(citation);
   }
 }

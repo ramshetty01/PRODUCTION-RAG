@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 
 _CITED_ID_PATTERN = re.compile(r"\[([^\[\]]+)\]")
@@ -32,6 +33,9 @@ def citation_for_chunk(chunk) -> dict:
     page = chunk.metadata.get("page")
     source_name = _source_name(source)
     page_label = f"page {page}" if page is not None else "page unknown"
+    source_url = f"/sources/open?path={quote(source)}" if source else ""
+    if source.lower().endswith(".pdf") and page is not None:
+        source_url = f"{source_url}#page={int(page) + 1}"
     return {
         "id": citation_id,
         "label": f"{source_name}, {page_label}",
@@ -40,6 +44,8 @@ def citation_for_chunk(chunk) -> dict:
         "page": page,
         "chunk_index": chunk.metadata.get("chunk_index"),
         "snippet": chunk.page_content,
+        "context": chunk.page_content,
+        "source_url": source_url,
         "quote": chunk.page_content,
     }
 
@@ -85,13 +91,21 @@ def productize_citations(citations: list[dict]) -> list[dict]:
     clean = []
     for citation in citations:
         source = citation.get("source") or _source_name(str(citation.get("source_path", "")))
+        source_path = str(citation.get("source_path", ""))
         page = citation.get("page")
         page_label = f"page {page}" if page is not None else "page unknown"
+        source_url = ""
+        if source_path:
+            source_url = f"/sources/open?path={quote(source_path)}"
+            if source_path.lower().endswith(".pdf") and page is not None:
+                source_url = f"{source_url}#page={int(page) + 1}"
         clean.append(
             {
                 **citation,
                 "label": citation.get("label") or f"{source}, {page_label}",
                 "snippet": citation.get("snippet") or citation.get("quote", ""),
+                "context": citation.get("context") or citation.get("quote", ""),
+                "source_url": citation.get("source_url") or source_url,
             }
         )
     return clean
