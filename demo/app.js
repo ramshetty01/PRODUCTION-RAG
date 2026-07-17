@@ -29,8 +29,10 @@ const metricRequests = document.querySelector("#metricRequests");
 const metricLatency = document.querySelector("#metricLatency");
 const metricStatus = document.querySelector("#metricStatus");
 const workspaceId = localStorage.getItem("rag_workspace_id") || crypto.randomUUID();
+const sessionId = localStorage.getItem("rag_session_id") || crypto.randomUUID();
 
 localStorage.setItem("rag_workspace_id", workspaceId);
+localStorage.setItem("rag_session_id", sessionId);
 
 const scenarios = {
   vendor: {
@@ -112,6 +114,7 @@ function queryBody() {
   return {
     query: queryInput.value.trim(),
     workspace_id: workspaceId,
+    session_id: sessionId,
     retrieval_mode: retrievalMode.value,
     top_k: Number(topK.value),
   };

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
 from src.rag.chunking import DEFAULT_DB_PATH, DEFAULT_PDF_PATH, chunk_pdf, chunk_text_file, chunk_token_summary, count_tokens
 from src.rag.config import load_settings
+from src.rag.conversation import ConversationMemoryStore, ConversationTurn, build_contextual_query
 from src.rag.evaluation_report import build_evaluation_report
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
@@ -72,6 +73,7 @@ class QueryRequest(BaseModel):
     retrieval_mode: str = Field(default=SETTINGS.retrieval_mode)
     persist_dir: str = Field(default=SETTINGS.vector_db_path)
     workspace_id: str | None = None
+    session_id: str | None = None
     metadata_filters: dict | None = None
     user_roles: list[str] = Field(default_factory=lambda: ["public"], deprecated=True)
 
@@ -169,6 +171,7 @@ QUERY_CACHE = build_query_cache(SETTINGS.cache_backend, SETTINGS.redis_url)
 RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_url, max_requests=120, window_seconds=60)
 METRICS = MetricsRegistry()
 OTEL = configure_opentelemetry(SETTINGS)
+CONVERSATION_MEMORY = ConversationMemoryStore(max_turns=SETTINGS.conversation_max_turns)
 
 
 def _auth_context(
@@ -235,6 +238,20 @@ def _safe_workspace_id(workspace_id: str | None) -> str | None:
     return value
 
 
+def _safe_session_id(session_id: str | None) -> str | None:
+    if session_id is None or session_id.strip() == "":
+        return None
+    value = session_id.strip()
+    if len(value) > 120:
+        raise HTTPException(status_code=400, detail="session_id is too long")
+    if any(not (character.isalnum() or character in {"-", "_"}) for character in value):
+        raise HTTPException(
+            status_code=400,
+            detail="session_id may only contain letters, numbers, hyphen, and underscore",
+        )
+    return value
+
+
 def _effective_metadata_filters(request: QueryRequest) -> dict:
     metadata_filters = dict(request.metadata_filters or {})
     workspace_id = _safe_workspace_id(request.workspace_id)
@@ -293,12 +310,19 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
     if not RATE_LIMITER.allow("default"):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
 
+    safe_session_id = _safe_session_id(request.session_id)
+    safe_workspace_id = _safe_workspace_id(request.workspace_id)
+    conversation_turns = CONVERSATION_MEMORY.get(safe_session_id, safe_workspace_id, auth_context.cache_scope())
+    retrieval_query = build_contextual_query(safe_query, conversation_turns)
     event = TraceEvent(request_id=request_id, query=safe_query)
     cache_filters = {
         **_effective_metadata_filters(request),
         "_retrieval_mode": requested_mode,
         "_auth_scope": auth_context.cache_scope(),
+        "_session_id": safe_session_id,
     }
+    if safe_session_id:
+        cache_filters["_conversation_turns"] = len(conversation_turns)
     with OTEL.span(
         "rag.cache",
         {
@@ -307,7 +331,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
             "rag.top_k": request.top_k,
         },
     ):
-        cached_payload = QUERY_CACHE.get(safe_query, request.top_k, cache_filters)
+        cached_payload = QUERY_CACHE.get(retrieval_query, request.top_k, cache_filters)
     if cached_payload:
         with OTEL.span("rag.cache.hit", {"rag.request_id": request_id, "rag.cache_hit": True}):
             pass
@@ -327,7 +351,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                 },
             ):
                 retrieval_mode, chunks = _retrieve_for_request(
-                    safe_query,
+                    retrieval_query,
                     request,
                     vectorstore,
                     auth_context,
@@ -367,11 +391,23 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                 "auth_subject": auth_context.subject,
                 "auth_roles": sorted(auth_context.roles),
                 "tenant_id": auth_context.tenant_id,
+                "query": retrieval_query,
+                "conversation_turns": len(conversation_turns),
             },
             "trace": event.to_log_dict(),
             "cached": False,
         }
-        QUERY_CACHE.set(safe_query, request.top_k, payload, cache_filters)
+        QUERY_CACHE.set(retrieval_query, request.top_k, payload, cache_filters)
+        CONVERSATION_MEMORY.append(
+            safe_session_id,
+            safe_workspace_id,
+            auth_context.cache_scope(),
+            ConversationTurn(
+                user=safe_query,
+                assistant=response["answer"],
+                citations=citation_ids(response["citations"]),
+            ),
+        )
         return payload
     except HTTPException:
         raise
