@@ -166,6 +166,11 @@ def test_demo_frontend_assets_are_served():
     assert 'type="module" src="/demo/app.js"' in page.text
     assert "chatMessages" in page.text
     assert "Upload documents to start asking questions." in page.text
+    assert "onboardingPanel" in page.text
+    assert "Start your workspace" in page.text
+    assert "Upload a document" in page.text
+    assert "Wait for Ready" in page.text
+    assert "Ask your first question" in page.text
     assert 'class="workspace diagnostics-panel" aria-label="answer workspace" hidden' in page.text
     assert "evalFaithfulness" in page.text
     assert 'import {appState, mergeState} from "/demo/state.js";' in script.text
@@ -183,6 +188,8 @@ def test_demo_frontend_assets_are_served():
     assert "Indexing" in script.text
     assert "Ready" in script.text
     assert "renderChatMessage" in script.text
+    assert "onboardingPanel" in script.text
+    assert "Ready. Ask your first question." in script.text
     assert "Upload and index a corpus before asking." in script.text
     assert "rag_workspace_id" in script.text
     assert "rag_session_id" in script.text
@@ -219,6 +226,8 @@ def test_demo_frontend_assets_are_served():
     assert ".chat-history" in styles.text
     assert ".profile-menu" in styles.text
     assert ".chat-pane" in styles.text
+    assert ".onboarding-panel" in styles.text
+    assert ".onboarding-steps" in styles.text
     assert ".chat-messages" in styles.text
     assert ".composer-stack" in styles.text
     assert ".stage-topline" in styles.text
@@ -251,6 +260,7 @@ def test_demo_frontend_assets_are_served():
     assert "createInitialState" in state.text
     assert "upload:" in state.text
     assert "indexing:" in state.text
+    assert "onboarding:" in state.text
     assert "chat:" in state.text
     assert "citations:" in state.text
     assert "auth:" in state.text

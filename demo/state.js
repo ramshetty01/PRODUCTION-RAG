@@ -16,6 +16,10 @@ export function createInitialState() {
       status: "empty",
       message: "Upload and index a corpus before asking.",
     },
+    onboarding: {
+      step: "upload",
+      completed: false,
+    },
     chat: {
       busy: false,
       error: null,

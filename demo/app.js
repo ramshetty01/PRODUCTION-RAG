@@ -39,6 +39,8 @@ const feedbackForm = document.querySelector("#feedbackForm");
 const feedbackNote = document.querySelector("#feedbackNote");
 const feedbackStatus = document.querySelector("#feedbackStatus");
 const chatMessages = document.querySelector("#chatMessages");
+const onboardingPanel = document.querySelector("#onboardingPanel");
+const onboardingStatus = document.querySelector("#onboardingStatus");
 const workspaceId = localStorage.getItem("rag_workspace_id") || crypto.randomUUID();
 const sessionId = localStorage.getItem("rag_session_id") || crypto.randomUUID();
 const savedAuthType = localStorage.getItem("rag_auth_type") || "none";
@@ -80,15 +82,29 @@ function setChatBusy(value) {
 }
 
 function renderIndexReadiness(payload) {
+  const ready = Boolean(payload.ready);
   mergeState({
     indexing: {
-      ready: Boolean(payload.ready),
+      ready,
       status: payload.status || "empty",
       message: payload.message || "Index status unavailable",
     },
+    onboarding: {
+      step: ready ? "question" : payload.status === "empty" ? "upload" : "ready",
+      completed: ready,
+    },
   });
   indexStatus.textContent = payload.message || "Index status unavailable";
-  indexStatus.className = `pill ${payload.ready ? "" : payload.status === "failed" ? "error" : "muted"}`.trim();
+  indexStatus.className = `pill ${ready ? "" : payload.status === "failed" ? "error" : "muted"}`.trim();
+  if (onboardingPanel && onboardingStatus) {
+    onboardingPanel.dataset.step = appState.onboarding.step;
+    onboardingPanel.hidden = appState.onboarding.completed;
+    onboardingStatus.textContent = ready
+      ? "Ready. Ask your first question."
+      : payload.status === "empty"
+        ? "Upload a document to create your private workspace index."
+        : "Scanning your corpus. Chat unlocks when indexing is Ready.";
+  }
   askButton.disabled = appState.chat.busy || !appState.indexing.ready;
 }
 
