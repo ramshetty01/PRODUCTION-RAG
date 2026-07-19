@@ -351,6 +351,7 @@ def _product_error_detail(
     message: str,
     *,
     retry: str,
+    actions: list[str] | None = None,
     request_id: str | None = None,
     trace: dict | None = None,
 ) -> dict:
@@ -358,6 +359,7 @@ def _product_error_detail(
         "code": code,
         "message": message,
         "retry": retry,
+        "actions": actions or ["retry"],
     }
     if request_id:
         detail["request_id"] = request_id
@@ -376,6 +378,7 @@ def _classify_query_error(exc: Exception, request_id: str, event: TraceEvent) ->
             "vector_store_unavailable",
             "The document index is not available right now.",
             retry="Reindex the corpus, then retry the question.",
+            actions=["reindex", "retry", "contact_admin"],
             request_id=request_id,
             trace=trace,
         )
@@ -384,6 +387,7 @@ def _classify_query_error(exc: Exception, request_id: str, event: TraceEvent) ->
             "retrieval_unavailable",
             "We could not search the indexed corpus right now.",
             retry="Retry the question. If it repeats, reindex the corpus.",
+            actions=["retry", "reindex"],
             request_id=request_id,
             trace=trace,
         )
@@ -393,6 +397,7 @@ def _classify_query_error(exc: Exception, request_id: str, event: TraceEvent) ->
             "answer_generation_unavailable",
             "The answer model did not respond.",
             retry="Retry the question or check the configured LLM provider.",
+            actions=["retry", "contact_admin"],
             request_id=request_id,
             trace=trace,
         )
@@ -400,6 +405,7 @@ def _classify_query_error(exc: Exception, request_id: str, event: TraceEvent) ->
         "rag_request_failed",
         "We could not answer this question right now.",
         retry="Retry the request. If it repeats, check the request trace.",
+        actions=["retry", "contact_admin"],
         request_id=request_id,
         trace=trace,
     )
@@ -412,23 +418,27 @@ def _classify_ingestion_error(exc: Exception) -> dict:
             "document_parse_failed",
             "We could not read this file.",
             retry="Upload a clean PDF, Markdown, text, HTML, CSV, DOCX, or PPTX export.",
+            actions=["reupload"],
         )
     if any(term in text for term in ["embedding", "embed"]):
         return _product_error_detail(
             "embedding_failed",
             "We could not create embeddings for this document.",
             retry="Retry indexing after checking the embedding provider.",
+            actions=["reindex", "contact_admin"],
         )
     if any(term in text for term in ["vector", "chroma", "collection", "persist", "index"]):
         return _product_error_detail(
             "index_write_failed",
             "We could not write this document to the search index.",
             retry="Retry indexing. If it repeats, reset or inspect the vector database.",
+            actions=["reindex", "contact_admin"],
         )
     return _product_error_detail(
         "indexing_failed",
         "We could not index this document.",
         retry="Retry with a smaller or cleaner document.",
+        actions=["reupload", "contact_admin"],
     )
 
 
@@ -1159,11 +1169,27 @@ async def upload_document(
     safe_access_roles = _safe_access_roles(access_roles)
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
-        raise HTTPException(status_code=400, detail="supported upload types: PDF, DOCX, PPTX, Markdown, HTML, CSV, or text")
+        raise HTTPException(
+            status_code=400,
+            detail=_product_error_detail(
+                "unsupported_upload_type",
+                "Upload a PDF, DOCX, PPTX, Markdown, HTML, CSV, or text file.",
+                retry="Choose a supported document type and upload again.",
+                actions=["reupload"],
+            ),
+        )
 
     safe_name = sanitize_upload_filename(file.filename or f"upload{suffix}")
     if Path(safe_name).suffix.lower() not in SUPPORTED_UPLOAD_SUFFIXES:
-        raise HTTPException(status_code=400, detail="supported upload types: PDF, DOCX, PPTX, Markdown, HTML, CSV, or text")
+        raise HTTPException(
+            status_code=400,
+            detail=_product_error_detail(
+                "unsupported_upload_type",
+                "Upload a PDF, DOCX, PPTX, Markdown, HTML, CSV, or text file.",
+                retry="Choose a supported document type and upload again.",
+                actions=["reupload"],
+            ),
+        )
     upload_dir = _safe_api_path(PROJECT_ROOT / "data" / "uploads")
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_path = upload_dir / safe_name
@@ -1171,7 +1197,15 @@ async def upload_document(
 
     content = await file.read()
     if not content:
-        raise HTTPException(status_code=400, detail="uploaded file is empty")
+        raise HTTPException(
+            status_code=400,
+            detail=_product_error_detail(
+                "empty_upload",
+                "The uploaded file is empty.",
+                retry="Choose a non-empty document and upload again.",
+                actions=["reupload"],
+            ),
+        )
     if len(content) > SETTINGS.upload_max_bytes:
         raise HTTPException(status_code=413, detail=f"uploaded file exceeds {SETTINGS.upload_max_bytes} bytes")
     saved_path.write_bytes(content)
@@ -1179,7 +1213,15 @@ async def upload_document(
         run_upload_scan(saved_path, SETTINGS.upload_scan_command)
     except ValueError as exc:
         saved_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=400, detail=f"upload rejected by scanner: {exc}") from exc
+        raise HTTPException(
+            status_code=400,
+            detail=_product_error_detail(
+                "upload_scan_failed",
+                "The upload did not pass the safety scan.",
+                retry="Upload a clean export or contact an admin.",
+                actions=["reupload", "contact_admin"],
+            ),
+        ) from exc
 
     try:
         if background:
@@ -1429,8 +1471,8 @@ def query_stream(request: QueryRequest, auth_context: AuthContext = Depends(_aut
                 yield _sse("token", {"text": chunk})
             yield _sse("complete", payload)
         except HTTPException as exc:
-            detail = exc.detail if isinstance(exc.detail, str) else exc.detail.get("message", str(exc.detail))
-            yield _sse("error", {"status_code": exc.status_code, "message": detail})
+            detail = {"message": exc.detail} if isinstance(exc.detail, str) else exc.detail
+            yield _sse("error", {"status_code": exc.status_code, **detail})
 
     return StreamingResponse(stream_events(), media_type="text/event-stream")
 

@@ -426,6 +426,27 @@ p {
   white-space: pre-wrap;
 }
 
+.recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.recovery-actions button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--cream);
+  font: normal normal 500 0.78rem/1 var(--font-ui);
+  padding: 0 12px;
+}
+
+.recovery-actions button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .citation-chips {
   display: flex;
   flex-wrap: wrap;
