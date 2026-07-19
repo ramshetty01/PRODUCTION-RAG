@@ -149,9 +149,13 @@ def test_demo_frontend_assets_are_served():
 
     assert page.status_code == 200
     assert "Production RAG Demo Console" in page.text
-    assert "Evidence-first answers" in page.text
+    assert "Ask your documents" in page.text
+    assert "Private AI workspace" in page.text
+    assert "New chat" in page.text
+    assert "Vendor evidence review" in page.text
+    assert "Payroll policy check" in page.text
+    assert "Usage/Billing" in page.text
     assert "Local enterprise RAG" in page.text
-    assert "Private corpus" in page.text
     assert "What evidence is required before vendor onboarding?" in page.text
     assert "authType" in page.text
     assert "credential" in page.text
@@ -160,6 +164,9 @@ def test_demo_frontend_assets_are_served():
     assert 'accept=".pdf,.md,.markdown,.txt,.docx,.pptx,.html,.csv"' in page.text
     assert "indexStatus" in page.text
     assert 'type="module" src="/demo/app.js"' in page.text
+    assert "chatMessages" in page.text
+    assert "Upload documents to start asking questions." in page.text
+    assert 'class="workspace diagnostics-panel" aria-label="answer workspace" hidden' in page.text
     assert "evalFaithfulness" in page.text
     assert 'import {appState, mergeState} from "/demo/state.js";' in script.text
     assert "/query" in script.text
@@ -168,6 +175,14 @@ def test_demo_frontend_assets_are_served():
     assert "background" in script.text
     assert "/ingestion-jobs/" in script.text
     assert "pollIngestionJob" in script.text
+    assert "indexingLabel" in script.text
+    assert "Uploading" in script.text
+    assert "Scanning" in script.text
+    assert "Reading document" in script.text
+    assert "Chunking" in script.text
+    assert "Indexing" in script.text
+    assert "Ready" in script.text
+    assert "renderChatMessage" in script.text
     assert "Upload and index a corpus before asking." in script.text
     assert "rag_workspace_id" in script.text
     assert "rag_session_id" in script.text
@@ -199,6 +214,13 @@ def test_demo_frontend_assets_are_served():
     assert "/feedback" in script.text
     assert "lastPayload.request_id" in script.text
     assert ".workspace" in styles.text
+    assert ".saas-shell" in styles.text
+    assert ".app-sidebar" in styles.text
+    assert ".chat-history" in styles.text
+    assert ".profile-menu" in styles.text
+    assert ".chat-pane" in styles.text
+    assert ".chat-messages" in styles.text
+    assert ".composer-stack" in styles.text
     assert ".stage-topline" in styles.text
     assert "--ds-color-bg" in styles.text
     assert "--ds-space-4" in styles.text
