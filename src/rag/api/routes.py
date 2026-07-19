@@ -50,6 +50,7 @@ from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode, select_retrieval_strategy
 from src.rag.runtime_quality import score_runtime_answer
 from src.rag.security import build_rate_limiter, run_upload_scan, sanitize_upload_filename, validate_path, validate_query
+from src.rag.usage import DEFAULT_USAGE_LOG, UsageEvent, append_usage, load_usage, usage_summary
 from src.rag.vector_store import build_vector_db, count_records, delete_records_by_metadata
 
 
@@ -147,6 +148,10 @@ class FeedbackEventsResponse(BaseModel):
 
 class MonitoringResponse(BaseModel):
     metrics: dict
+
+
+class UsageResponse(BaseModel):
+    usage: dict
 
 
 class LLMHealthResponse(BaseModel):
@@ -919,6 +924,18 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                 visible_answer = f"{visible_answer}\n\nQuality warning: {'; '.join(quality.reasons)}"
             event.token_usage = response.get("token_usage", {})
             event.token_usage["estimated_cost"] = estimate_llm_cost(event.token_usage)
+            append_usage(
+                UsageEvent(
+                    request_id=request_id,
+                    subject=auth_context.subject,
+                    org_id=auth_context.tenant_id,
+                    workspace_id=safe_workspace_id or "default",
+                    prompt_tokens=int(event.token_usage.get("prompt_tokens", 0)),
+                    answer_tokens=int(event.token_usage.get("answer_tokens", 0)),
+                    estimated_cost=float(event.token_usage.get("estimated_cost", 0.0)),
+                ),
+                _safe_api_path(DEFAULT_USAGE_LOG),
+            )
         payload = {
             "request_id": request_id,
             "answer": visible_answer,
@@ -1466,6 +1483,19 @@ def observability_dashboard(
     else:
         _require_global_admin(auth_context)
     return _observability_dashboard(window_minutes, workspace_id)
+
+
+@router.get("/usage", response_model=UsageResponse)
+def usage_report(
+    workspace_id: str | None = None,
+    auth_context: AuthContext = Depends(_admin_context),
+):
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    if safe_workspace_id:
+        _require_workspace_admin(auth_context, safe_workspace_id)
+    else:
+        _require_global_admin(auth_context)
+    return UsageResponse(usage=usage_summary(load_usage(_safe_api_path(DEFAULT_USAGE_LOG)), safe_workspace_id))
 
 
 @router.get("/audit", response_model=AuditResponse)
