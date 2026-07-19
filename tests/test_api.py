@@ -488,6 +488,33 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
     assert '"access_roles": [' in manifest.read_text(encoding="utf-8")
 
 
+def test_upload_endpoint_returns_managed_storage_uri(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            manifest_path=str(tmp_path / "data" / "processed" / "ingestion_manifest.json"),
+            vector_db_path=str(tmp_path / "chroma_db"),
+        ),
+    )
+    monkeypatch.setattr(routes, "build_vector_db", lambda chunks, persist_directory, settings: object())
+    monkeypatch.setattr(routes, "count_records", lambda _vectorstore: 1)
+    monkeypatch.setattr(routes, "store_uploaded_file", lambda *_args: "s3://rag-documents/workspace-a/policy.md")
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        data={"workspace_id": "workspace-a"},
+        files={"file": ("policy.md", b"# Policy", "text/markdown")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["storage_uri"] == "s3://rag-documents/workspace-a/policy.md"
+    manifest = json.loads((tmp_path / "data" / "processed" / "ingestion_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["documents"]["policy"]["storage_uri"] == "s3://rag-documents/workspace-a/policy.md"
+
+
 def test_upload_endpoint_can_queue_background_ingestion(tmp_path, monkeypatch):
     routes.INGESTION_JOBS.clear()
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)

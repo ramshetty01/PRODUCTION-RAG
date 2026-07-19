@@ -87,6 +87,7 @@ def record_document_ingestion(
     chunk_count: int,
     status: str = "indexed",
     error: str | None = None,
+    storage_uri: str | None = None,
 ) -> dict:
     documents = manifest.setdefault("documents", {})
     previous = documents.get(decision.document_id)
@@ -95,6 +96,7 @@ def record_document_ingestion(
         "document_version": decision.document_version,
         "content_hash": decision.content_hash,
         "source_path": str(Path(source_path)),
+        "storage_uri": storage_uri or str(Path(source_path)),
         "chunk_count": chunk_count,
         "ingested_at": utc_now_iso(),
         "status": status,

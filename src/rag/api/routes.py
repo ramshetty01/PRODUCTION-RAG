@@ -50,6 +50,7 @@ from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode, select_retrieval_strategy
 from src.rag.runtime_quality import score_runtime_answer
 from src.rag.security import build_rate_limiter, run_upload_scan, sanitize_upload_filename, validate_path, validate_query
+from src.rag.storage import store_uploaded_file
 from src.rag.usage import DEFAULT_USAGE_LOG, UsageEvent, append_usage, load_usage, usage_summary
 from src.rag.vector_store import build_vector_db, count_records, delete_records_by_metadata
 
@@ -184,6 +185,7 @@ class EvaluationResponse(BaseModel):
 class UploadIngestResponse(BaseModel):
     filename: str
     saved_path: str
+    storage_uri: str | None = None
     document_id: str
     document_version: str
     workspace_id: str = "default"
@@ -218,6 +220,7 @@ class DocumentRecordResponse(BaseModel):
     status: str
     chunk_count: int
     source_path: str
+    storage_uri: str | None = None
     ingested_at: str | None = None
     error: str | None = None
     retry_action: str | None = None
@@ -756,6 +759,7 @@ def _index_uploaded_file(
     safe_access_roles: list[str],
     owner: str | None = None,
     job_id: str | None = None,
+    storage_uri: str | None = None,
 ) -> UploadIngestResponse:
     if job_id:
         _set_ingestion_job(job_id, status="parsing", progress=20)
@@ -777,7 +781,7 @@ def _index_uploaded_file(
         _set_ingestion_job(job_id, status="embedding", progress=75)
     vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
     vector_records = count_records(vectorstore)
-    record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
+    record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks), storage_uri=storage_uri)
     manifest["documents"][decision.document_id]["filename"] = safe_name
     manifest["documents"][decision.document_id]["access_roles"] = safe_access_roles
     manifest["documents"][decision.document_id]["owner"] = owner or "unknown"
@@ -788,6 +792,7 @@ def _index_uploaded_file(
     response = UploadIngestResponse(
         filename=safe_name,
         saved_path=str(saved_path),
+        storage_uri=storage_uri,
         document_id=decision.document_id,
         document_version=decision.document_version,
         workspace_id=safe_workspace_id or "default",
@@ -820,12 +825,20 @@ def _index_uploaded_file(
     return response
 
 
-def _run_ingestion_job(job_id: str, saved_path: Path, safe_name: str, workspace_id: str | None, access_roles: list[str], owner: str | None = None) -> None:
+def _run_ingestion_job(
+    job_id: str,
+    saved_path: Path,
+    safe_name: str,
+    workspace_id: str | None,
+    access_roles: list[str],
+    owner: str | None = None,
+    storage_uri: str | None = None,
+) -> None:
     max_attempts = 2
     for attempt in range(1, max_attempts + 1):
         _set_ingestion_job(job_id, attempts=attempt)
         try:
-            _index_uploaded_file(saved_path, safe_name, workspace_id, access_roles, owner=owner, job_id=job_id)
+            _index_uploaded_file(saved_path, safe_name, workspace_id, access_roles, owner=owner, job_id=job_id, storage_uri=storage_uri)
             return
         except Exception as exc:
             LOGGER.exception("Background ingestion job failed", extra={"job_id": job_id, "attempt": attempt})
@@ -1348,6 +1361,7 @@ async def upload_document(
             ),
         ) from exc
     shutil.move(str(quarantine_path), saved_path)
+    storage_uri = store_uploaded_file(saved_path, safe_name, safe_workspace_id, SETTINGS)
 
     try:
         if background:
@@ -1360,17 +1374,19 @@ async def upload_document(
                 workspace_id=safe_workspace_id or "default",
                 owner=auth_context.subject,
                 filename=safe_name,
+                storage_uri=storage_uri,
                 chunks_created=0,
             )
             thread = threading.Thread(
                 target=_run_ingestion_job,
-                args=(job_id, saved_path, safe_name, safe_workspace_id, safe_access_roles, auth_context.subject),
+                args=(job_id, saved_path, safe_name, safe_workspace_id, safe_access_roles, auth_context.subject, storage_uri),
                 daemon=True,
             )
             thread.start()
             return UploadIngestResponse(
                 filename=safe_name,
                 saved_path=str(saved_path),
+                storage_uri=storage_uri,
                 document_id=Path(safe_name).stem,
                 document_version="pending",
                 workspace_id=safe_workspace_id or "default",
@@ -1382,7 +1398,7 @@ async def upload_document(
                 vector_records=None,
                 chunk_summary=None,
             )
-        return _index_uploaded_file(saved_path, safe_name, safe_workspace_id, safe_access_roles, owner=auth_context.subject)
+        return _index_uploaded_file(saved_path, safe_name, safe_workspace_id, safe_access_roles, owner=auth_context.subject, storage_uri=storage_uri)
     except HTTPException:
         raise
     except Exception as exc:
