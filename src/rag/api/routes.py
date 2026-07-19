@@ -202,10 +202,13 @@ class DocumentRecordResponse(BaseModel):
     document_version: str
     filename: str | None = None
     workspace_id: str | None = None
+    owner: str | None = None
     status: str
     chunk_count: int
     source_path: str
     ingested_at: str | None = None
+    error: str | None = None
+    retry_action: str | None = None
 
 
 class DocumentListResponse(BaseModel):
@@ -225,6 +228,10 @@ class DeleteDocumentResponse(BaseModel):
     document_id: str
     status: str
     vector_records_deleted: int | None = None
+
+
+class RenameDocumentRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=160)
 
 
 class PurgeWorkspaceResponse(BaseModel):
@@ -639,10 +646,19 @@ def _document_manifest_path() -> Path:
 def _document_records(workspace_id: str | None = None) -> list[dict]:
     safe_workspace_id = _safe_workspace_id(workspace_id)
     manifest = load_manifest(_document_manifest_path())
-    records = list(manifest.get("documents", {}).values())
+    records = []
+    for record in manifest.get("documents", {}).values():
+        records.append(_document_response_record(record))
     if safe_workspace_id:
         records = [record for record in records if record.get("workspace_id") == safe_workspace_id]
     return sorted(records, key=lambda record: record.get("ingested_at") or "", reverse=True)
+
+
+def _document_response_record(record: dict) -> dict:
+    row = dict(record)
+    row["owner"] = row.get("owner") or row.get("uploaded_by") or "unknown"
+    row["retry_action"] = "reindex" if row.get("status") not in {"indexed", "skipped"} else None
+    return row
 
 
 def _index_uploaded_file(
@@ -650,6 +666,7 @@ def _index_uploaded_file(
     safe_name: str,
     safe_workspace_id: str | None,
     safe_access_roles: list[str],
+    owner: str | None = None,
     job_id: str | None = None,
 ) -> UploadIngestResponse:
     if job_id:
@@ -675,6 +692,7 @@ def _index_uploaded_file(
     record_document_ingestion(manifest, decision, saved_path, chunk_count=len(chunks))
     manifest["documents"][decision.document_id]["filename"] = safe_name
     manifest["documents"][decision.document_id]["access_roles"] = safe_access_roles
+    manifest["documents"][decision.document_id]["owner"] = owner or "unknown"
     if safe_workspace_id:
         manifest["documents"][decision.document_id]["workspace_id"] = safe_workspace_id
     save_manifest(manifest, manifest_path)
@@ -714,9 +732,9 @@ def _index_uploaded_file(
     return response
 
 
-def _run_ingestion_job(job_id: str, saved_path: Path, safe_name: str, workspace_id: str | None, access_roles: list[str]) -> None:
+def _run_ingestion_job(job_id: str, saved_path: Path, safe_name: str, workspace_id: str | None, access_roles: list[str], owner: str | None = None) -> None:
     try:
-        _index_uploaded_file(saved_path, safe_name, workspace_id, access_roles, job_id=job_id)
+        _index_uploaded_file(saved_path, safe_name, workspace_id, access_roles, owner=owner, job_id=job_id)
     except Exception as exc:
         LOGGER.exception("Background ingestion job failed", extra={"job_id": job_id})
         detail = _classify_ingestion_error(exc)
@@ -1164,6 +1182,7 @@ async def upload_document(
     workspace_id: str | None = Form(default=None),
     access_roles: str | None = Form(default=None),
     background: bool = Form(default=False),
+    auth_context: AuthContext = Depends(_auth_context),
 ):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     safe_access_roles = _safe_access_roles(access_roles)
@@ -1232,12 +1251,13 @@ async def upload_document(
                 status="queued",
                 progress=0,
                 workspace_id=safe_workspace_id or "default",
+                owner=auth_context.subject,
                 filename=safe_name,
                 chunks_created=0,
             )
             thread = threading.Thread(
                 target=_run_ingestion_job,
-                args=(job_id, saved_path, safe_name, safe_workspace_id, safe_access_roles),
+                args=(job_id, saved_path, safe_name, safe_workspace_id, safe_access_roles, auth_context.subject),
                 daemon=True,
             )
             thread.start()
@@ -1255,7 +1275,7 @@ async def upload_document(
                 vector_records=None,
                 chunk_summary=None,
             )
-        return _index_uploaded_file(saved_path, safe_name, safe_workspace_id, safe_access_roles)
+        return _index_uploaded_file(saved_path, safe_name, safe_workspace_id, safe_access_roles, owner=auth_context.subject)
     except HTTPException:
         raise
     except Exception as exc:
@@ -1336,6 +1356,28 @@ def delete_document(
         status="deleted",
         vector_records_deleted=deleted_records,
     )
+
+
+@router.patch("/documents/{document_id}", response_model=DocumentRecordResponse)
+def rename_document(
+    document_id: str,
+    request: RenameDocumentRequest,
+    workspace_id: str | None = None,
+    auth_context: AuthContext = Depends(_admin_context),
+):
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    manifest_path = _document_manifest_path()
+    manifest = load_manifest(manifest_path)
+    record = manifest.get("documents", {}).get(document_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    if safe_workspace_id and record.get("workspace_id") != safe_workspace_id:
+        raise HTTPException(status_code=404, detail="document not found")
+    _require_workspace_admin(auth_context, record.get("workspace_id") or safe_workspace_id)
+    record["filename"] = sanitize_upload_filename(request.filename)
+    save_manifest(manifest, manifest_path)
+    _audit_admin_action("admin_document_rename", auth_context, record.get("workspace_id"), document_id)
+    return DocumentRecordResponse(**_document_response_record(record))
 
 
 @router.post("/workspaces/{workspace_id}/purge", response_model=PurgeWorkspaceResponse)
