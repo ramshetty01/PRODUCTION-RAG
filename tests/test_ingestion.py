@@ -1,7 +1,7 @@
 from langchain_core.documents import Document
 
 from src.rag.config import RuntimeSettings
-from src.rag.vector_store import build_chroma_db, build_vector_db, count_records, load_chroma_db, load_vector_db
+from src.rag.vector_store import build_chroma_db, build_vector_db, count_records, delete_records_by_metadata, load_chroma_db, load_vector_db
 
 
 class FakeEmbeddings:
@@ -99,6 +99,7 @@ def test_qdrant_backend_uses_managed_adapter(monkeypatch):
     assert calls["build"]["collection_name"] == "prod_chunks"
     assert calls["build"]["url"] == "https://qdrant.example"
     assert calls["build"]["api_key"] == "secret"
+    assert calls["build"]["documents"][0].metadata["chunk_id"] == "vendor:p0:c0"
     assert calls["load"]["collection_name"] == "prod_chunks"
 
 
@@ -111,3 +112,46 @@ def test_qdrant_backend_requires_url():
         assert "Qdrant" in str(exc) or "RAG_QDRANT_URL" in str(exc)
     else:
         raise AssertionError("expected qdrant backend to require configuration")
+
+
+def test_qdrant_delete_uses_tenant_metadata_filter(monkeypatch):
+    import sys
+
+    deleted = {}
+
+    class FakeMatchValue:
+        def __init__(self, value):
+            self.value = value
+
+    class FakeFieldCondition:
+        def __init__(self, key, match):
+            self.key = key
+            self.match = match
+
+    class FakeFilter:
+        def __init__(self, must):
+            self.must = must
+
+    class FakeModels:
+        MatchValue = FakeMatchValue
+        FieldCondition = FakeFieldCondition
+        Filter = FakeFilter
+
+    class FakeClient:
+        def delete(self, collection_name, points_selector):
+            deleted["collection_name"] = collection_name
+            deleted["points_selector"] = points_selector
+
+    class FakeVectorStore:
+        client = FakeClient()
+        collection_name = "prod_chunks"
+
+    monkeypatch.setitem(sys.modules, "qdrant_client", type("FakeQdrant", (), {"models": FakeModels}))
+
+    assert delete_records_by_metadata(FakeVectorStore(), {"workspace_id": "tenant-a", "document_id": "policy"}) is None
+    conditions = deleted["points_selector"].must
+    assert deleted["collection_name"] == "prod_chunks"
+    assert [(condition.key, condition.match.value) for condition in conditions] == [
+        ("workspace_id", "tenant-a"),
+        ("document_id", "policy"),
+    ]
