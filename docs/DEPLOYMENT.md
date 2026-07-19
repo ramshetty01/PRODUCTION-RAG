@@ -51,7 +51,9 @@ cp deploy/production.env.example .env.production
 
 Staging uses `/var/data/production-rag-staging/...`; production uses
 `/var/data/production-rag/...`. Keep API keys, JWT secrets, and model keys in
-the deployment platform or secret manager, not in committed env files.
+the deployment platform or secret manager, not in committed env files. See
+[Secret Management](SECRETS.md) for the required secret checklist and
+`RAG_SECRETS_FILE` mounted-secret option.
 
 Run smoke tests against each environment after deploy:
 

@@ -17,6 +17,8 @@ curl http://localhost:8000/health
 The compose stack is local-only by default. Use `deploy/staging.env.example`
 and `deploy/production.env.example` for hosted environments so data paths and
 secrets stay split.
+Inject real secrets from the platform secret manager or set `RAG_SECRETS_FILE`
+to a mounted env/JSON secret file; never commit filled env files.
 
 ## Kubernetes
 

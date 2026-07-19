@@ -57,11 +57,14 @@ def test_env_example_documents_runtime_settings():
     assert "RAG_PORT=" in env_example
     assert "RAG_VECTOR_DB_PATH=" in env_example
     assert "RAG_EMBEDDING_MODEL=" in env_example
+    assert "RAG_SECRETS_FILE=" in env_example
     assert "RAG_ENVIRONMENT=staging" in staging
     assert "/var/data/production-rag-staging" in staging
+    assert "RAG_API_KEYS=" in staging
     assert "RAG_ENVIRONMENT=production" in production
     assert "/var/data/production-rag/chroma_db" in production
-    assert "replace-with-secret-manager-value" in production
+    assert "RAG_JWT_SECRET=" in production
+    assert "RAG_LLM_API_KEY=" in production
 
 
 def test_deployment_docs_include_build_run_and_health_commands():
@@ -77,6 +80,8 @@ def test_deployment_docs_include_build_run_and_health_commands():
     assert "optional local `.env`" in docs
     assert "cp deploy/staging.env.example .env.staging" in docs
     assert "cp deploy/production.env.example .env.production" in docs
+    assert "[Secret Management](SECRETS.md)" in docs
+    assert "RAG_SECRETS_FILE" in docs
     assert "python scripts/smoke_deploy.py https://staging-rag.example.com" in docs
     assert "python scripts/smoke_deploy.py https://production-rag.example.com" in docs
     assert "RAG_ENVIRONMENT=production" in docs

@@ -99,6 +99,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
             [
                 "RAG_VECTOR_DB_PATH=/tmp/chroma",
                 "RAG_ENVIRONMENT=staging",
+                "RAG_SECRETS_FILE=",
                 "RAG_VECTOR_BACKEND=qdrant",
                 "RAG_VECTOR_COLLECTION=prod_chunks",
                 "RAG_QDRANT_URL=https://qdrant.example",
@@ -145,6 +146,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
 
     assert settings.vector_db_path == "/tmp/chroma"
     assert settings.environment == "staging"
+    assert settings.secrets_file == ""
     assert settings.vector_backend == "qdrant"
     assert settings.vector_collection == "prod_chunks"
     assert settings.qdrant_url == "https://qdrant.example"
@@ -184,6 +186,21 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.observability_export_api_key == "obs-key"
 
 
+def test_load_settings_reads_mounted_secrets_file(tmp_path, monkeypatch):
+    for key in ["RAG_SECRETS_FILE", "RAG_LLM_API_KEY", "RAG_JWT_SECRET"]:
+        monkeypatch.delenv(key, raising=False)
+    secrets = tmp_path / "secrets.env"
+    secrets.write_text("RAG_LLM_API_KEY=mounted-key\nRAG_JWT_SECRET=mounted-secret\n", encoding="utf-8")
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(f"RAG_SECRETS_FILE={secrets}\nRAG_LLM_API_KEY=local-key\n", encoding="utf-8")
+
+    settings = load_settings(dotenv)
+
+    assert settings.secrets_file == str(secrets)
+    assert settings.llm_api_key == "mounted-key"
+    assert settings.jwt_secret == "mounted-secret"
+
+
 def test_production_environment_rejects_local_default_paths(tmp_path, monkeypatch):
     monkeypatch.delenv("RAG_VECTOR_DB_PATH", raising=False)
     monkeypatch.delenv("RAG_MANIFEST_PATH", raising=False)
@@ -198,6 +215,7 @@ def test_env_example_documents_required_runtime_settings():
     env_example = open(".env.example", encoding="utf-8").read()
 
     assert "RAG_CHUNK_SIZE=" in env_example
+    assert "RAG_SECRETS_FILE=" in env_example
     assert "RAG_VECTOR_BACKEND=" in env_example
     assert "RAG_VECTOR_COLLECTION=" in env_example
     assert "RAG_QDRANT_URL=" in env_example
