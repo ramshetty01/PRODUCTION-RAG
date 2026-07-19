@@ -66,11 +66,15 @@ class MetricsRegistry:
     request_count: int = 0
     status_counts: dict[int, int] = field(default_factory=dict)
     latency_ms_total: float = 0.0
+    provider_failures: dict[str, int] = field(default_factory=dict)
 
     def record_request(self, status_code: int, latency_ms: float) -> None:
         self.request_count += 1
         self.status_counts[status_code] = self.status_counts.get(status_code, 0) + 1
         self.latency_ms_total += latency_ms
+
+    def record_provider_failures(self, failures: dict[str, int]) -> None:
+        self.provider_failures.update(failures)
 
     def to_prometheus(self) -> str:
         lines = [
@@ -88,8 +92,12 @@ class MetricsRegistry:
                 "# HELP rag_api_request_latency_ms_total Cumulative API request latency in milliseconds.",
                 "# TYPE rag_api_request_latency_ms_total counter",
                 f"rag_api_request_latency_ms_total {round(self.latency_ms_total, 3)}",
+                "# HELP rag_llm_provider_failures_total LLM provider failures by provider.",
+                "# TYPE rag_llm_provider_failures_total counter",
             ]
         )
+        for provider, count in sorted(self.provider_failures.items()):
+            lines.append(f'rag_llm_provider_failures_total{{provider="{provider}"}} {count}')
         return "\n".join(lines) + "\n"
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from dataclasses import dataclass
 
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -13,6 +14,13 @@ from src.rag.llm.client import (
     OpenAILLMClient,
     OpenRouterLLMClient,
 )
+
+
+LLM_PROVIDER_FAILURES: dict[str, int] = {}
+
+
+def _record_provider_failure(provider: str) -> None:
+    LLM_PROVIDER_FAILURES[provider] = LLM_PROVIDER_FAILURES.get(provider, 0) + 1
 
 
 @dataclass(frozen=True)
@@ -74,6 +82,24 @@ class LocalOpenAIModelProvider(LocalModelProvider):
         )
 
 
+@dataclass
+class FallbackLLMClient(LLMClient):
+    clients: list[tuple[str, LLMClient]]
+
+    def generate(self, prompt: str) -> str:
+        errors = []
+        for name, client in self.clients:
+            try:
+                return client.generate(prompt)
+            except Exception as exc:
+                _record_provider_failure(name)
+                errors.append(f"{name}: {type(exc).__name__}")
+        raise RuntimeError(f"All LLM providers failed; degraded mode active ({'; '.join(errors)})")
+
+    def health_check(self) -> dict:
+        return {"status": "ok", "provider": "FallbackLLMClient", "providers": [name for name, _ in self.clients]}
+
+
 PROVIDERS = {
     "local": LocalModelProvider,
     "extractive": ExtractiveModelProvider,
@@ -83,9 +109,28 @@ PROVIDERS = {
 }
 
 
+def _fallback_provider_names(settings: RuntimeSettings) -> list[str]:
+    return [name.strip() for name in settings.llm_fallback_providers.split(",") if name.strip()]
+
+
+def _provider_for_name(name: str, settings: RuntimeSettings) -> ModelProvider:
+    provider_class = PROVIDERS.get(name)
+    if provider_class is None:
+        raise ValueError(f"Unsupported model provider: {name}")
+    return provider_class(name=name, settings=replace(settings, llm_provider=name))
+
+
 def get_model_provider(settings: RuntimeSettings | None = None) -> ModelProvider:
     settings = settings or load_settings()
-    provider_class = PROVIDERS.get(settings.llm_provider)
-    if provider_class is None:
-        raise ValueError(f"Unsupported model provider: {settings.llm_provider}")
-    return provider_class(name=settings.llm_provider, settings=settings)
+    primary = _provider_for_name(settings.llm_provider, settings)
+    fallback_names = _fallback_provider_names(settings)
+    if not fallback_names:
+        return primary
+
+    class FallbackModelProvider(type(primary)):
+        def llm(self) -> LLMClient:
+            clients = [(primary.name, primary.llm())]
+            clients.extend((name, _provider_for_name(name, settings).llm()) for name in fallback_names)
+            return FallbackLLMClient(clients)
+
+    return FallbackModelProvider(name=settings.llm_provider, settings=settings)

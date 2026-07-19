@@ -3,17 +3,28 @@ import pytest
 from src.rag.config import RuntimeSettings
 from src.rag.llm.client import (
     ExtractiveLLMClient,
+    LLMClient,
     LocalOpenAICompatibleLLMClient,
     LocalSynthesisLLMClient,
     OpenAILLMClient,
     OpenRouterLLMClient,
 )
-from src.rag.models import get_model_provider
+from src.rag.models import FallbackLLMClient, LLM_PROVIDER_FAILURES, get_model_provider
 
 
 class FakeEmbeddings:
     def __init__(self, model_name):
         self.model_name = model_name
+
+
+class FailingLLM(LLMClient):
+    def generate(self, prompt: str) -> str:
+        raise RuntimeError("provider outage")
+
+
+class WorkingLLM(LLMClient):
+    def generate(self, prompt: str) -> str:
+        return "ok"
 
 
 def test_model_provider_returns_configured_extractive_llm():
@@ -100,3 +111,30 @@ def test_openrouter_provider_requires_key_and_model():
 def test_model_provider_rejects_unknown_provider():
     with pytest.raises(ValueError, match="Unsupported model provider"):
         get_model_provider(RuntimeSettings(llm_provider="unknown"))
+
+
+def test_fallback_llm_tries_next_provider_and_tracks_failure():
+    LLM_PROVIDER_FAILURES.clear()
+    llm = FallbackLLMClient([("primary", FailingLLM()), ("fallback", WorkingLLM())])
+
+    assert llm.generate("prompt") == "ok"
+    assert LLM_PROVIDER_FAILURES == {"primary": 1}
+
+
+def test_fallback_llm_reports_degraded_mode_when_all_providers_fail():
+    LLM_PROVIDER_FAILURES.clear()
+    llm = FallbackLLMClient([("primary", FailingLLM()), ("fallback", FailingLLM())])
+
+    with pytest.raises(RuntimeError, match="All LLM providers failed; degraded mode active"):
+        llm.generate("prompt")
+
+    assert LLM_PROVIDER_FAILURES == {"fallback": 1, "primary": 1}
+
+
+def test_model_provider_builds_fallback_llm_client():
+    settings = RuntimeSettings(llm_provider="extractive", llm_fallback_providers="local")
+
+    llm = get_model_provider(settings).llm()
+
+    assert isinstance(llm, FallbackLLMClient)
+    assert [name for name, _ in llm.clients] == ["extractive", "local"]

@@ -63,12 +63,14 @@ def test_metrics_registry_exports_prometheus_text():
 
     metrics.record_request(200, 12.3456)
     metrics.record_request(400, 4.0)
+    metrics.record_provider_failures({"openrouter": 2})
     payload = metrics.to_prometheus()
 
     assert "rag_api_requests_total 2" in payload
     assert 'rag_api_request_status_total{status_code="200"} 1' in payload
     assert 'rag_api_request_status_total{status_code="400"} 1' in payload
     assert "rag_api_request_latency_ms_total 16.346" in payload
+    assert 'rag_llm_provider_failures_total{provider="openrouter"} 2' in payload
 
 
 def test_structured_request_log_is_machine_parseable():
