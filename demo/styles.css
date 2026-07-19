@@ -426,6 +426,7 @@ p {
   white-space: pre-wrap;
 }
 
+.answer-actions,
 .recovery-actions {
   display: flex;
   flex-wrap: wrap;
@@ -433,6 +434,7 @@ p {
   margin-top: 14px;
 }
 
+.answer-actions button,
 .recovery-actions button {
   min-height: 34px;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -443,6 +445,7 @@ p {
   padding: 0 12px;
 }
 
+.answer-actions button:hover,
 .recovery-actions button:hover {
   background: rgba(255, 255, 255, 0.2);
 }

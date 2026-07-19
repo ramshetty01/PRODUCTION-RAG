@@ -13,6 +13,7 @@ const authType = document.querySelector("#authType");
 const credential = document.querySelector("#credential");
 const authBadge = document.querySelector("#authBadge");
 const askButton = document.querySelector("#askButton");
+const stopButton = document.querySelector("#stopButton");
 const uploadInput = document.querySelector("#documentUpload");
 const uploadButton = document.querySelector("#uploadButton");
 const uploadStatus = document.querySelector("#uploadStatus");
@@ -45,6 +46,8 @@ const workspaceId = localStorage.getItem("rag_workspace_id") || crypto.randomUUI
 const sessionId = localStorage.getItem("rag_session_id") || crypto.randomUUID();
 const savedAuthType = localStorage.getItem("rag_auth_type") || "none";
 const savedCredential = sessionStorage.getItem("rag_credential") || "";
+let activeQueryController = null;
+let lastQueryBody = null;
 
 localStorage.setItem("rag_workspace_id", workspaceId);
 localStorage.setItem("rag_session_id", sessionId);
@@ -79,6 +82,7 @@ function setStatus(label, variant = "") {
 function setChatBusy(value) {
   mergeState({chat: {busy: value}});
   askButton.disabled = appState.chat.busy || !appState.indexing.ready;
+  stopButton.hidden = !appState.chat.busy;
 }
 
 function renderIndexReadiness(payload) {
@@ -176,6 +180,29 @@ function renderChatMessage(role, content, citationItems = []) {
   return bubble;
 }
 
+async function copyAnswer(answer) {
+  await navigator.clipboard?.writeText(answer || "");
+  feedbackStatus.textContent = "Copied";
+}
+
+function retryLastQuestion() {
+  if (!lastQueryBody?.query) return;
+  queryInput.value = lastQueryBody.query;
+  form.requestSubmit();
+}
+
+function renderAnswerActions(bubble, payload) {
+  const actions = document.createElement("div");
+  actions.className = "answer-actions";
+  actions.innerHTML = `
+    <button type="button" data-answer-action="copy">Copy</button>
+    <button type="button" data-answer-action="retry">Retry</button>
+  `;
+  actions.querySelector('[data-answer-action="copy"]').addEventListener("click", () => copyAnswer(payload.answer));
+  actions.querySelector('[data-answer-action="retry"]').addEventListener("click", retryLastQuestion);
+  bubble.append(actions);
+}
+
 function renderCitations(items) {
   mergeState({citations: items});
   citations.innerHTML = "";
@@ -221,7 +248,7 @@ function renderCitations(items) {
 function renderResult(payload) {
   mergeState({chat: {lastPayload: payload, error: null}});
   answerText.textContent = payload.answer || "The answer is not available in the retrieved context.";
-  renderChatMessage("assistant", answerText.textContent, payload.citations || []);
+  renderAnswerActions(renderChatMessage("assistant", answerText.textContent, payload.citations || []), payload);
   requestId.textContent = payload.request_id || "No request";
   cacheBadge.textContent = payload.cached ? "Cached" : "Fresh";
   cacheBadge.className = `pill ${payload.cached ? "" : "muted"}`.trim();
@@ -478,11 +505,14 @@ async function askQuestion(event) {
 
   try {
     const body = queryBody();
+    lastQueryBody = body;
     renderChatMessage("user", body.query);
+    activeQueryController = new AbortController();
     const response = await fetch("/query/stream", {
       method: "POST",
       headers,
       body: JSON.stringify(body),
+      signal: activeQueryController.signal,
     });
     if (!response.ok) {
       await postStandardQuery(headers, body);
@@ -492,13 +522,18 @@ async function askQuestion(event) {
 
     setStatus("Online");
   } catch (error) {
-    renderError(error.message ? error : {message: "We could not answer this question right now.", actions: ["retry"]});
+    renderError(error.name === "AbortError" ? "Stopped. Retry when ready." : (error.message ? error : {message: "We could not answer this question right now.", actions: ["retry"]}));
     setStatus("Error", "error");
   } finally {
+    activeQueryController = null;
     setChatBusy(false);
     askButton.lastChild.textContent = " Ask";
     refreshMetrics();
   }
+}
+
+function stopAnswer() {
+  activeQueryController?.abort();
 }
 
 function applyAuthPreset(preset) {
@@ -630,6 +665,7 @@ filterDocument.addEventListener("input", () => renderActiveFilters(selectedFilte
 filterType.addEventListener("change", () => renderActiveFilters(selectedFilters()));
 filterRole.addEventListener("input", () => renderActiveFilters(selectedFilters()));
 form.addEventListener("submit", askQuestion);
+stopButton.addEventListener("click", stopAnswer);
 uploadForm.addEventListener("submit", uploadDocument);
 feedbackForm.addEventListener("click", (event) => {
   const button = event.target.closest("[data-feedback]");
