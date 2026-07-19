@@ -61,6 +61,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEMO_DIR = PROJECT_ROOT / "demo"
 LEGAL_DIR = PROJECT_ROOT / "docs" / "legal"
 SUPPORTED_UPLOAD_SUFFIXES = SUPPORTED_DOCUMENT_SUFFIXES
+SUPPORTED_UPLOAD_MIME_TYPES = {
+    ".csv": {"text/csv", "application/csv", "application/vnd.ms-excel"},
+    ".docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+    ".html": {"text/html"},
+    ".md": {"text/markdown", "text/plain", "application/octet-stream"},
+    ".markdown": {"text/markdown", "text/plain", "application/octet-stream"},
+    ".pdf": {"application/pdf"},
+    ".pptx": {"application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+    ".txt": {"text/plain", "application/octet-stream"},
+}
 LEGAL_PAGES = {
     "privacy": "privacy.md",
     "terms": "terms.md",
@@ -707,6 +717,14 @@ def _enforce_upload_quota(workspace_id: str | None, upload_bytes: int) -> None:
         raise _quota_error("This workspace has too many indexing jobs running.")
 
 
+def _enforce_user_upload_limit(auth_context: AuthContext) -> None:
+    if not SETTINGS.upload_max_files_per_user:
+        return
+    uploaded = [record for record in _document_records() if record.get("owner") == auth_context.subject or record.get("uploaded_by") == auth_context.subject]
+    if len(uploaded) >= SETTINGS.upload_max_files_per_user:
+        raise HTTPException(status_code=429, detail="upload limit reached for this user")
+
+
 def _index_uploaded_file(
     saved_path: Path,
     safe_name: str,
@@ -1247,6 +1265,9 @@ async def upload_document(
                 actions=["reupload"],
             ),
         )
+    if file.content_type and file.content_type not in SUPPORTED_UPLOAD_MIME_TYPES.get(suffix, set()):
+        raise HTTPException(status_code=400, detail="uploaded file type does not match the filename")
+    _enforce_user_upload_limit(auth_context)
 
     safe_name = sanitize_upload_filename(file.filename or f"upload{suffix}")
     if Path(safe_name).suffix.lower() not in SUPPORTED_UPLOAD_SUFFIXES:
@@ -1260,9 +1281,12 @@ async def upload_document(
             ),
         )
     upload_dir = _safe_api_path(PROJECT_ROOT / "data" / "uploads")
+    quarantine_dir = _safe_api_path(PROJECT_ROOT / "data" / "quarantine")
     upload_dir.mkdir(parents=True, exist_ok=True)
+    quarantine_dir.mkdir(parents=True, exist_ok=True)
     saved_path = upload_dir / safe_name
     saved_path = _safe_api_path(saved_path)
+    quarantine_path = _safe_api_path(quarantine_dir / safe_name)
 
     content = await file.read()
     if not content:
@@ -1278,11 +1302,11 @@ async def upload_document(
     if len(content) > SETTINGS.upload_max_bytes:
         raise HTTPException(status_code=413, detail=f"uploaded file exceeds {SETTINGS.upload_max_bytes} bytes")
     _enforce_upload_quota(safe_workspace_id, len(content))
-    saved_path.write_bytes(content)
+    quarantine_path.write_bytes(content)
     try:
-        run_upload_scan(saved_path, SETTINGS.upload_scan_command)
+        run_upload_scan(quarantine_path, SETTINGS.upload_scan_command)
     except ValueError as exc:
-        saved_path.unlink(missing_ok=True)
+        quarantine_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=400,
             detail=_product_error_detail(
@@ -1292,6 +1316,7 @@ async def upload_document(
                 actions=["reupload", "contact_admin"],
             ),
         ) from exc
+    shutil.move(str(quarantine_path), saved_path)
 
     try:
         if background:

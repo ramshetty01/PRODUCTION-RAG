@@ -605,6 +605,19 @@ def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypat
     assert empty.json()["detail"]["actions"] == ["reupload"]
 
 
+def test_upload_endpoint_rejects_mime_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        files={"file": ("policy.pdf", b"%PDF", "text/plain")},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "uploaded file type does not match the filename"
+
+
 def test_upload_endpoint_sanitizes_names_limits_size_and_runs_scanner(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(
@@ -633,6 +646,43 @@ def test_upload_endpoint_sanitizes_names_limits_size_and_runs_scanner(tmp_path, 
     assert safe.status_code == 200
     assert safe.json()["filename"] == "unsafe_name.md"
     assert (tmp_path / "data" / "uploads" / "unsafe_name.md").exists()
+    assert not (tmp_path / "data" / "quarantine" / "unsafe_name.md").exists()
+
+
+def test_upload_endpoint_enforces_user_upload_limit(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "existing.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Existing", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "existing": {
+                        "chunk_count": 1,
+                        "document_id": "existing",
+                        "document_version": "v1",
+                        "owner": "dev-public",
+                        "source_path": str(source),
+                        "status": "indexed",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest_path), upload_max_files_per_user=1))
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        files={"file": ("new.md", b"# New", "text/markdown")},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "upload limit reached for this user"
 
 
 def test_upload_endpoint_rejects_failed_scanner(tmp_path, monkeypatch):
