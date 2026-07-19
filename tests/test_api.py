@@ -725,6 +725,97 @@ def test_workspace_purge_deletes_documents_vectors_chats_and_logs(tmp_path, monk
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["documents"] == {}
 
 
+def test_scheduled_retention_deletes_expired_documents_and_audits(tmp_path, monkeypatch):
+    uploads = tmp_path / "data" / "uploads"
+    uploads.mkdir(parents=True)
+    for name in ["old.md", "short.md", "kept.md"]:
+        (uploads / name).write_text("# Policy", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "old": {
+                        "document_id": "old",
+                        "source_path": str(uploads / "old.md"),
+                        "workspace_id": "workspace-a",
+                        "ingested_at": "2026-06-01T00:00:00Z",
+                    },
+                    "short": {
+                        "document_id": "short",
+                        "source_path": str(uploads / "short.md"),
+                        "workspace_id": "workspace-b",
+                        "workspace_retention_days": 3,
+                        "ingested_at": "2026-07-10T00:00:00Z",
+                    },
+                    "kept": {
+                        "document_id": "kept",
+                        "source_path": str(uploads / "kept.md"),
+                        "workspace_id": "workspace-c",
+                        "org_retention_days": 90,
+                        "ingested_at": "2026-06-01T00:00:00Z",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeCollection:
+        def __init__(self):
+            self.count_value = 5
+            self.deletes = []
+
+        def count(self):
+            return self.count_value
+
+        def delete(self, where):
+            self.deletes.append(where)
+            self.count_value -= 1
+
+    class FakeVectorStore:
+        def __init__(self):
+            self._collection = FakeCollection()
+
+    vectorstore = FakeVectorStore()
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            manifest_path=str(manifest_path),
+            vector_db_path=str(tmp_path / "chroma_db"),
+            retention_days=30,
+            retention_schedule_seconds=0,
+        ),
+    )
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: vectorstore)
+    client = TestClient(routes.create_app())
+
+    blocked = client.post("/retention/run")
+    response = client.post("/retention/run", headers={"X-API-Key": "admin-key"})
+
+    assert blocked.status_code == 401
+    assert response.status_code == 200
+    assert response.json()["documents_deleted"] == 2
+    assert response.json()["files_deleted"] == 2
+    assert response.json()["vector_records_deleted"] == 2
+    assert vectorstore._collection.deletes == [
+        {"document_id": "old", "workspace_id": "workspace-a"},
+        {"document_id": "short", "workspace_id": "workspace-b"},
+    ]
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert sorted(manifest["documents"]) == ["kept"]
+    assert not (uploads / "old.md").exists()
+    assert not (uploads / "short.md").exists()
+    assert (uploads / "kept.md").exists()
+    audit = (tmp_path / "logs" / "audit.jsonl").read_text(encoding="utf-8")
+    assert "scheduled_retention_delete" in audit
+    assert "workspace-b" in audit
+
+
 def test_query_endpoint_isolates_results_by_workspace(monkeypatch):
     class WorkspaceVectorStore:
         def similarity_search(self, query, k):

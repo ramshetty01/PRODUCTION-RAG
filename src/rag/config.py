@@ -31,6 +31,7 @@ class RuntimeSettings:
     conversation_max_turns: int = 6
     retention_days: int = 30
     retention_purge_logs: bool = True
+    retention_schedule_seconds: int = 86400
     upload_max_bytes: int = 10 * 1024 * 1024
     upload_scan_command: str = ""
     llm_provider: str = "extractive"
@@ -114,6 +115,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         conversation_max_turns=_setting_int(dotenv_values, "RAG_CONVERSATION_MAX_TURNS", 6),
         retention_days=_setting_int(dotenv_values, "RAG_RETENTION_DAYS", 30),
         retention_purge_logs=_setting_bool(dotenv_values, "RAG_RETENTION_PURGE_LOGS", True),
+        retention_schedule_seconds=_setting_int(dotenv_values, "RAG_RETENTION_SCHEDULE_SECONDS", 86400),
         upload_max_bytes=_setting_int(dotenv_values, "RAG_UPLOAD_MAX_BYTES", 10 * 1024 * 1024),
         upload_scan_command=_setting_value(dotenv_values, "RAG_UPLOAD_SCAN_COMMAND", ""),
         llm_provider=_setting_value(dotenv_values, "RAG_LLM_PROVIDER", "extractive"),
