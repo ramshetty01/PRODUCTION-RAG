@@ -114,6 +114,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_RETENTION_SCHEDULE_SECONDS=3600",
                 "RAG_UPLOAD_MAX_BYTES=1024",
                 "RAG_UPLOAD_SCAN_COMMAND=/bin/true",
+                "RAG_UPLOAD_MAX_FILES_PER_USER=2",
                 "RAG_QUOTA_MAX_DOCUMENTS_PER_WORKSPACE=2",
                 "RAG_QUOTA_MAX_STORAGE_BYTES_PER_WORKSPACE=2048",
                 "RAG_QUOTA_MAX_REQUESTS_PER_USER=3",
@@ -166,6 +167,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.retention_schedule_seconds == 3600
     assert settings.upload_max_bytes == 1024
     assert settings.upload_scan_command == "/bin/true"
+    assert settings.upload_max_files_per_user == 2
     assert settings.quota_max_documents_per_workspace == 2
     assert settings.quota_max_storage_bytes_per_workspace == 2048
     assert settings.quota_max_requests_per_user == 3
@@ -238,6 +240,7 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_RETENTION_PURGE_LOGS=" in env_example
     assert "RAG_UPLOAD_MAX_BYTES=" in env_example
     assert "RAG_UPLOAD_SCAN_COMMAND=" in env_example
+    assert "RAG_UPLOAD_MAX_FILES_PER_USER=" in env_example
     assert "RAG_QUOTA_MAX_DOCUMENTS_PER_WORKSPACE=" in env_example
     assert "RAG_QUOTA_MAX_STORAGE_BYTES_PER_WORKSPACE=" in env_example
     assert "RAG_QUOTA_MAX_REQUESTS_PER_USER=" in env_example

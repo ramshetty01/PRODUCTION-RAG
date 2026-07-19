@@ -247,6 +247,10 @@ Environment variables are documented in `.env.example`:
   `RAG_QUOTA_MAX_REQUESTS_PER_USER`, `RAG_QUOTA_MAX_TOKENS_PER_USER`, and
   `RAG_QUOTA_MAX_CONCURRENT_JOBS_PER_WORKSPACE`: optional billing and usage
   limits. Leave as `0` to disable a limit.
+- `RAG_UPLOAD_MAX_BYTES`, `RAG_UPLOAD_MAX_FILES_PER_USER`, and
+  `RAG_UPLOAD_SCAN_COMMAND`: upload safety controls. Files are written to
+  `data/quarantine`, MIME/extension checked, scanned when a command is
+  configured, then moved to `data/uploads` before indexing.
 - `RAG_OTEL_ENABLED`, `RAG_OTEL_SERVICE_NAME`, and
   `RAG_OTEL_EXPORTER_OTLP_ENDPOINT`: optional OpenTelemetry tracing controls.
 - Query cache entries are scoped by authenticated subject, tenant, and derived

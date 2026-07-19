@@ -35,6 +35,7 @@ class RuntimeSettings:
     retention_schedule_seconds: int = 86400
     upload_max_bytes: int = 10 * 1024 * 1024
     upload_scan_command: str = ""
+    upload_max_files_per_user: int = 0
     quota_max_documents_per_workspace: int = 0
     quota_max_storage_bytes_per_workspace: int = 0
     quota_max_requests_per_user: int = 0
@@ -142,6 +143,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         retention_schedule_seconds=_setting_int(dotenv_values, "RAG_RETENTION_SCHEDULE_SECONDS", 86400),
         upload_max_bytes=_setting_int(dotenv_values, "RAG_UPLOAD_MAX_BYTES", 10 * 1024 * 1024),
         upload_scan_command=_setting_value(dotenv_values, "RAG_UPLOAD_SCAN_COMMAND", ""),
+        upload_max_files_per_user=_setting_int(dotenv_values, "RAG_UPLOAD_MAX_FILES_PER_USER", 0),
         quota_max_documents_per_workspace=_setting_int(dotenv_values, "RAG_QUOTA_MAX_DOCUMENTS_PER_WORKSPACE", 0),
         quota_max_storage_bytes_per_workspace=_setting_int(dotenv_values, "RAG_QUOTA_MAX_STORAGE_BYTES_PER_WORKSPACE", 0),
         quota_max_requests_per_user=_setting_int(dotenv_values, "RAG_QUOTA_MAX_REQUESTS_PER_USER", 0),
