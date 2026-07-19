@@ -5,10 +5,12 @@ from langchain_core.documents import Document
 
 from src.rag.observability import (
     MetricsRegistry,
+    ManagedObservabilityExport,
     OptionalOpenTelemetry,
     TraceEvent,
     chunk_ids,
     citation_ids,
+    configure_managed_observability,
     configure_opentelemetry,
     new_request_id,
     structured_request_log,
@@ -124,3 +126,43 @@ def test_opentelemetry_config_is_noop_when_disabled():
 
     assert telemetry.enabled is False
     assert telemetry.reason == "disabled"
+
+
+def test_managed_observability_export_is_noop_when_disabled(monkeypatch):
+    calls = []
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: calls.append(request))
+
+    exporter = configure_managed_observability(RuntimeSettings(observability_export_enabled=False))
+    exporter.export_log({"event": "api_request"})
+
+    assert exporter.enabled is False
+    assert calls == []
+
+
+def test_managed_observability_export_posts_json(monkeypatch):
+    calls = []
+
+    class Response:
+        def close(self):
+            pass
+
+    def fake_urlopen(request, timeout):
+        calls.append((request, timeout))
+        return Response()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    exporter = ManagedObservabilityExport(
+        enabled=True,
+        endpoint="https://observability.example.com/ingest",
+        api_key="secret",
+        service_name="rag-test",
+    )
+
+    exporter.export_metric({"request_count": 1})
+
+    request, timeout = calls[0]
+    payload = json.loads(request.data.decode("utf-8"))
+    assert timeout == 2
+    assert request.full_url == "https://observability.example.com/ingest"
+    assert request.headers["Authorization"] == "Bearer secret"
+    assert payload == {"kind": "metric", "payload": {"request_count": 1}, "service": "rag-test"}

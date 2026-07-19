@@ -54,6 +54,9 @@ class RuntimeSettings:
     otel_enabled: bool = False
     otel_service_name: str = "production-rag"
     otel_exporter_otlp_endpoint: str = ""
+    observability_export_enabled: bool = False
+    observability_export_endpoint: str = ""
+    observability_export_api_key: str = ""
 
 
 def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
@@ -138,4 +141,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         otel_enabled=_setting_bool(dotenv_values, "RAG_OTEL_ENABLED", False),
         otel_service_name=_setting_value(dotenv_values, "RAG_OTEL_SERVICE_NAME", "production-rag"),
         otel_exporter_otlp_endpoint=_setting_value(dotenv_values, "RAG_OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+        observability_export_enabled=_setting_bool(dotenv_values, "RAG_OBSERVABILITY_EXPORT_ENABLED", False),
+        observability_export_endpoint=_setting_value(dotenv_values, "RAG_OBSERVABILITY_EXPORT_ENDPOINT", ""),
+        observability_export_api_key=_setting_value(dotenv_values, "RAG_OBSERVABILITY_EXPORT_API_KEY", ""),
     )

@@ -36,6 +36,7 @@ from src.rag.observability import (
     TraceEvent,
     chunk_ids,
     citation_ids,
+    configure_managed_observability,
     configure_opentelemetry,
     new_request_id,
     structured_request_log,
@@ -249,6 +250,7 @@ QUERY_CACHE = build_query_cache(SETTINGS.cache_backend, SETTINGS.redis_url)
 RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_url, max_requests=120, window_seconds=60)
 METRICS = MetricsRegistry()
 OTEL = configure_opentelemetry(SETTINGS)
+MANAGED_OBSERVABILITY = configure_managed_observability(SETTINGS)
 CONVERSATION_MEMORY = ConversationMemoryStore(max_turns=SETTINGS.conversation_max_turns)
 INGESTION_JOBS: dict[str, dict] = {}
 INGESTION_JOB_LOCK = threading.Lock()
@@ -641,6 +643,15 @@ def _index_uploaded_file(
             chunks_created=len(chunks),
             vector_records=vector_records,
         )
+    MANAGED_OBSERVABILITY.export_log(
+        {
+            "event": "ingestion_completed",
+            "document_id": decision.document_id,
+            "workspace_id": safe_workspace_id or "default",
+            "chunks_created": len(chunks),
+            "vector_records": vector_records,
+        }
+    )
     return response
 
 
@@ -650,6 +661,7 @@ def _run_ingestion_job(job_id: str, saved_path: Path, safe_name: str, workspace_
     except Exception as exc:
         LOGGER.exception("Background ingestion job failed", extra={"job_id": job_id})
         detail = _classify_ingestion_error(exc)
+        MANAGED_OBSERVABILITY.export_log({"event": "ingestion_failed", "job_id": job_id, "error": detail["code"]})
         _set_ingestion_job(job_id, status="failed", progress=100, error=detail["message"])
 
 
@@ -821,6 +833,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
             },
             _safe_api_path(DEFAULT_AUDIT_LOG),
         )
+        MANAGED_OBSERVABILITY.export_trace(event.to_log_dict())
         QUERY_CACHE.set(retrieval_query, request.top_k, payload, cache_filters)
         CONVERSATION_MEMORY.append(
             safe_session_id,
@@ -1315,14 +1328,29 @@ def create_app() -> FastAPI:
         finally:
             latency_ms = (time.perf_counter() - start) * 1000
             METRICS.record_request(status_code, latency_ms)
+            log_payload = {
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": status_code,
+                "latency_ms": round(latency_ms, 3),
+                "request_id": request_id,
+            }
             LOGGER.info(
                 structured_request_log(
-                    request.method,
-                    request.url.path,
-                    status_code,
-                    latency_ms,
-                    request_id,
+                    log_payload["method"],
+                    log_payload["path"],
+                    log_payload["status_code"],
+                    log_payload["latency_ms"],
+                    log_payload["request_id"],
                 )
+            )
+            MANAGED_OBSERVABILITY.export_log({"event": "api_request", **log_payload})
+            MANAGED_OBSERVABILITY.export_metric(
+                {
+                    "request_count": METRICS.request_count,
+                    "status_counts": METRICS.status_counts,
+                    "latency_ms_total": round(METRICS.latency_ms_total, 3),
+                }
             )
             if "response" in locals():
                 response.headers["X-Request-ID"] = request_id

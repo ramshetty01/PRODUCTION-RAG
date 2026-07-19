@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import uuid
+import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -103,6 +104,46 @@ def structured_request_log(method: str, path: str, status_code: int, latency_ms:
             "latency_ms": round(latency_ms, 3),
         },
         sort_keys=True,
+    )
+
+
+class ManagedObservabilityExport:
+    def __init__(self, enabled: bool = False, endpoint: str = "", api_key: str = "", service_name: str = "production-rag"):
+        self.enabled = enabled and bool(endpoint)
+        self.endpoint = endpoint
+        self.api_key = api_key
+        self.service_name = service_name
+        self.reason = "enabled" if self.enabled else "disabled"
+
+    def export(self, kind: str, payload: dict) -> None:
+        if not self.enabled:
+            return
+        body = json.dumps({"service": self.service_name, "kind": kind, "payload": payload}, sort_keys=True).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        request = urllib.request.Request(self.endpoint, data=body, headers=headers, method="POST")
+        try:
+            urllib.request.urlopen(request, timeout=2).close()
+        except Exception:
+            LOGGER.exception("Managed observability export failed")
+
+    def export_log(self, payload: dict) -> None:
+        self.export("log", payload)
+
+    def export_metric(self, payload: dict) -> None:
+        self.export("metric", payload)
+
+    def export_trace(self, payload: dict) -> None:
+        self.export("trace", payload)
+
+
+def configure_managed_observability(settings: RuntimeSettings) -> ManagedObservabilityExport:
+    return ManagedObservabilityExport(
+        enabled=settings.observability_export_enabled,
+        endpoint=settings.observability_export_endpoint,
+        api_key=settings.observability_export_api_key,
+        service_name=settings.otel_service_name,
     )
 
 

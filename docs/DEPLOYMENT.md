@@ -164,6 +164,19 @@ RAG_OTEL_SERVICE_NAME=production-rag
 RAG_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318/v1/traces
 ```
 
+For managed dashboards that accept JSON events over HTTPS, enable the built-in
+export hook. It sends request logs, request metrics, ingestion events, and RAG
+trace payloads to the configured endpoint:
+
+```bash
+RAG_OBSERVABILITY_EXPORT_ENABLED=true
+RAG_OBSERVABILITY_EXPORT_ENDPOINT=https://observability.example.com/ingest
+RAG_OBSERVABILITY_EXPORT_API_KEY=...
+```
+
+Alert routing should cover ingestion failures, model errors, high request
+latency, elevated 4xx/5xx rates, and vector index health.
+
 Install the optional OpenTelemetry packages in the runtime image when tracing is
 enabled:
 
