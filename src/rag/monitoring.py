@@ -66,4 +66,30 @@ def promote_feedback_to_eval_case(event: FeedbackEvent) -> dict:
         "source": "production-feedback",
         "page": 0,
         "verified": False,
+        "review_status": "needs_human_review",
+        "category": "production-feedback",
+        "permission_level": "review",
+        "retrieval_mode": "review",
+        "source_request": {
+            "request_id": event.request_id,
+            "helpful": event.helpful,
+            "citations": event.citations,
+            "latency_ms": event.latency_ms,
+            "note": event.note,
+            "created_at": event.created_at,
+        },
     }
+
+
+def draft_eval_cases_from_feedback(events: list[FeedbackEvent]) -> list[dict]:
+    return [promote_feedback_to_eval_case(event) for event in events]
+
+
+def write_draft_eval_cases(events: list[FeedbackEvent], path: str | Path) -> int:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    cases = draft_eval_cases_from_feedback(events)
+    with path.open("w", encoding="utf-8") as handle:
+        for case in cases:
+            handle.write(json.dumps(case, sort_keys=True) + "\n")
+    return len(cases)

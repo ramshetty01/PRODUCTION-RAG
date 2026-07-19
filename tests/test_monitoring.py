@@ -1,9 +1,11 @@
 from src.rag.monitoring import (
     FeedbackEvent,
     append_feedback,
+    draft_eval_cases_from_feedback,
     load_feedback,
     monitoring_metrics,
     promote_feedback_to_eval_case,
+    write_draft_eval_cases,
 )
 
 
@@ -42,11 +44,32 @@ def test_monitoring_metrics_track_feedback_quality():
 
 
 def test_feedback_can_be_promoted_to_eval_case_for_review():
-    event = FeedbackEvent("req-1", "What failed?", "Weak answer", False, [], note="Missing source.")
+    event = FeedbackEvent("req-1", "What failed?", "Weak answer", False, ["docs:p0:c1"], 30.0, note="Missing source.")
 
     case = promote_feedback_to_eval_case(event)
 
     assert case["id"] == "feedback-req-1"
     assert case["question"] == "What failed?"
     assert case["verified"] is False
+    assert case["review_status"] == "needs_human_review"
     assert case["expected_evidence"] == "Missing source."
+    assert case["source_request"]["request_id"] == "req-1"
+    assert case["source_request"]["citations"] == ["docs:p0:c1"]
+    assert case["source_request"]["helpful"] is False
+
+
+def test_feedback_events_write_draft_eval_cases_for_human_review(tmp_path):
+    output = tmp_path / "drafts" / "feedback-candidates.jsonl"
+    events = [
+        FeedbackEvent("bad-1", "Bad?", "Weak answer", False, [], note="Missing citation."),
+        FeedbackEvent("good-1", "Good?", "Grounded answer", True, ["docs:p0:c1"]),
+    ]
+
+    cases = draft_eval_cases_from_feedback(events)
+    count = write_draft_eval_cases(events, output)
+
+    rows = [line for line in output.read_text(encoding="utf-8").splitlines() if line]
+    assert [case["source_request"]["helpful"] for case in cases] == [False, True]
+    assert count == 2
+    assert len(rows) == 2
+    assert '"review_status": "needs_human_review"' in rows[0]
