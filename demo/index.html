@@ -15,6 +15,12 @@
             <span>Private AI workspace</span>
           </div>
           <button class="new-chat-button ui-button" type="button">New chat</button>
+          <nav class="workspace-nav" aria-label="workspace navigation">
+            <button class="ui-sidebar-item is-active" type="button">Chat</button>
+            <button class="ui-sidebar-item" type="button">Documents</button>
+            <button class="ui-sidebar-item" type="button">Workspace</button>
+            <button class="ui-sidebar-item" type="button">Settings</button>
+          </nav>
           <nav class="chat-history" aria-label="previous chats">
             <p>Today</p>
             <button class="ui-sidebar-item is-active" type="button">New chat</button>
@@ -45,7 +51,10 @@
 
         <section class="saas-main">
           <header class="product-bar">
-            <strong>New chat</strong>
+            <div>
+              <strong>New chat</strong>
+              <span class="workspace-label">Workspace: Personal</span>
+            </div>
             <div class="status-strip" aria-label="workspace status">
               <span id="indexStatus" class="pill muted">Checking index</span>
               <span id="apiStatus" class="metric-value">Checking</span>

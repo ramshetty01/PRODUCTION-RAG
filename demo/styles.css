@@ -269,6 +269,14 @@ p {
   margin-bottom: 22px;
 }
 
+.workspace-nav {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .chat-history {
   display: grid;
   align-content: start;
@@ -323,6 +331,14 @@ p {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+}
+
+.workspace-label {
+  display: block;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.52);
+  font: normal normal 400 0.72rem/1.4 var(--font-mono);
+  text-transform: uppercase;
 }
 
 .chat-pane {

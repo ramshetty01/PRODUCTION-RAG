@@ -152,6 +152,11 @@ def test_demo_frontend_assets_are_served():
     assert "Ask your documents" in page.text
     assert "Private AI workspace" in page.text
     assert "New chat" in page.text
+    assert "workspace navigation" in page.text
+    assert "Documents" in page.text
+    assert "Workspace" in page.text
+    assert "Settings" in page.text
+    assert "Workspace: Personal" in page.text
     assert "Vendor evidence review" in page.text
     assert "Payroll policy check" in page.text
     assert "Usage/Billing" in page.text
@@ -262,6 +267,8 @@ def test_demo_frontend_assets_are_served():
     assert ".ui-loading-state" in styles.text
     assert ".ui-error-state" in styles.text
     assert ".auth-strip" in styles.text
+    assert ".workspace-nav" in styles.text
+    assert ".workspace-label" in styles.text
     assert ".upload-form" in styles.text
     assert "min-height: 700px" in styles.text
     assert "width: min(960px, calc(100% - 56px))" in styles.text
