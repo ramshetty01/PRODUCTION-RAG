@@ -952,7 +952,13 @@ def test_workspace_purge_deletes_documents_vectors_chats_and_logs(tmp_path, monk
     assert body["logs_deleted"] == 1
     assert not source.exists()
     assert not (logs / "feedback.jsonl").exists()
-    assert "admin_workspace_purge" in (logs / "audit.jsonl").read_text(encoding="utf-8")
+    audit_event = json.loads((logs / "audit.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert audit_event["event"] == "admin_workspace_purge"
+    assert audit_event["documents_deleted"] == 1
+    assert audit_event["files_deleted"] == 1
+    assert audit_event["vector_records_deleted"] == 3
+    assert audit_event["conversations_deleted"] == 1
+    assert audit_event["logs_deleted"] == 1
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["documents"] == {}
 
 

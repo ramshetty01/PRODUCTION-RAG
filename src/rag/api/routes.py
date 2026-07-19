@@ -323,7 +323,7 @@ def _require_workspace_admin(auth_context: AuthContext, workspace_id: str | None
     raise HTTPException(status_code=403, detail="workspace admin role required")
 
 
-def _audit_admin_action(action: str, auth_context: AuthContext, workspace_id: str | None, target: str | None = None) -> None:
+def _audit_admin_action(action: str, auth_context: AuthContext, workspace_id: str | None, target: str | None = None, extra: dict | None = None) -> None:
     append_audit_event(
         {
             "timestamp": datetime.now(UTC).isoformat(),
@@ -332,6 +332,7 @@ def _audit_admin_action(action: str, auth_context: AuthContext, workspace_id: st
             "tenant_id": auth_context.tenant_id,
             "workspace_id": workspace_id or "default",
             "target": target,
+            **(extra or {}),
         },
         _safe_api_path(DEFAULT_AUDIT_LOG),
     )
@@ -1414,7 +1415,19 @@ def purge_workspace(
     _clear_query_cache()
     conversations_deleted = CONVERSATION_MEMORY.clear_workspace(safe_workspace_id)
     logs_deleted = _purge_logs() if SETTINGS.retention_purge_logs else 0
-    _audit_admin_action("admin_workspace_purge", auth_context, safe_workspace_id, safe_workspace_id)
+    _audit_admin_action(
+        "admin_workspace_purge",
+        auth_context,
+        safe_workspace_id,
+        safe_workspace_id,
+        {
+            "documents_deleted": len(records),
+            "files_deleted": files_deleted,
+            "vector_records_deleted": deleted_records,
+            "conversations_deleted": conversations_deleted,
+            "logs_deleted": logs_deleted,
+        },
+    )
     return PurgeWorkspaceResponse(
         workspace_id=safe_workspace_id,
         documents_deleted=len(records),
