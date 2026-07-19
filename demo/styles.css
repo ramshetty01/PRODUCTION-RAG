@@ -308,6 +308,17 @@ p {
   padding: 5px 0;
 }
 
+.legal-links {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.legal-links a {
+  color: rgba(255, 255, 255, 0.58);
+  text-decoration: none;
+}
+
 .saas-main {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
