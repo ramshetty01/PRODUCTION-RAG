@@ -59,15 +59,35 @@ test:
 ```bash
 python -m uvicorn main:app --reload
 python scripts/load_test.py http://localhost:8000 \
+  --profile standard \
   --requests-per-endpoint 25 \
   --concurrency 8 \
   --api-key public-key \
   --output reports/load-test.json
 ```
 
-The script exercises `/health`, `/metrics`, and `/query`. The JSON report
-includes total requests, status counts, error rate, rate-limited request count,
-p50/p95/max latency, and query cache hit rate.
+The standard profile exercises `/health`, `/metrics`, `/upload`,
+`/index-status`, `/query`, and `/query/stream`. The JSON report includes the
+profile, concurrency, request count, status counts, error rate, rate-limited
+request count, p50/p95/max latency, and query cache hit rate.
+
+Use the CI-safe smoke profile when you only need endpoint coverage:
+
+```bash
+python scripts/load_test.py http://localhost:8000 --profile smoke --api-key public-key
+```
+
+Run abuse pressure separately so intentional failures do not mask launch
+latency:
+
+```bash
+python scripts/load_test.py http://localhost:8000 \
+  --profile abuse \
+  --requests-per-endpoint 5 \
+  --concurrency 12 \
+  --api-key public-key \
+  --output reports/abuse-test.json
+```
 
 Expected local thresholds:
 
@@ -76,6 +96,11 @@ Expected local thresholds:
   pressure tests.
 - 429 responses should appear when concurrency intentionally exceeds the
   configured request window.
+- oversized uploads should return a 4xx response without creating chunks.
+- concurrent background upload jobs should still leave `/index-status`
+  responsive.
+- streaming requests should complete without 5xx responses under the standard
+  profile.
 - cache hit rate should increase when repeated `/query` payloads are used.
 
 ## Adding Tests

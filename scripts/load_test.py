@@ -11,6 +11,9 @@ from urllib import error, request
 
 
 DEFAULT_QUERY = "What evidence is required before vendor onboarding?"
+SMOKE_REQUESTS_PER_ENDPOINT = 1
+SMOKE_CONCURRENCY = 2
+STANDARD_LARGE_UPLOAD_BYTES = 11 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -20,6 +23,14 @@ class LoadSample:
     latency_ms: float
     cached: bool = False
     error: str = ""
+
+
+@dataclass(frozen=True)
+class UploadPayload:
+    filename: str
+    content: bytes
+    content_type: str = "text/markdown"
+    fields: dict[str, str] | None = None
 
 
 def percentile(values: list[float], percentile_value: float) -> float:
@@ -62,11 +73,39 @@ def summarize(samples: list[LoadSample]) -> dict:
     }
 
 
-def _request_json(url: str, payload: dict | None = None, headers: dict | None = None) -> LoadSample:
+def _multipart_body(payload: UploadPayload) -> tuple[bytes, str]:
+    boundary = f"----rag-load-{time.time_ns()}"
+    parts: list[bytes] = []
+    for key, value in (payload.fields or {}).items():
+        parts.extend(
+            [
+                f"--{boundary}\r\n".encode("utf-8"),
+                f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"),
+                f"{value}\r\n".encode("utf-8"),
+            ]
+        )
+    parts.extend(
+        [
+            f"--{boundary}\r\n".encode("utf-8"),
+            f'Content-Disposition: form-data; name="file"; filename="{payload.filename}"\r\n'.encode("utf-8"),
+            f"Content-Type: {payload.content_type}\r\n\r\n".encode("utf-8"),
+            payload.content,
+            b"\r\n",
+            f"--{boundary}--\r\n".encode("utf-8"),
+        ]
+    )
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
+def _request_api(url: str, payload: dict | UploadPayload | None = None, headers: dict | None = None) -> LoadSample:
     body = None
     method = "GET"
     request_headers = headers or {}
-    if payload is not None:
+    if isinstance(payload, UploadPayload):
+        body, content_type = _multipart_body(payload)
+        method = "POST"
+        request_headers = {"Content-Type": content_type, **request_headers}
+    elif payload is not None:
         body = json.dumps(payload).encode("utf-8")
         method = "POST"
         request_headers = {"Content-Type": "application/json", **request_headers}
@@ -93,28 +132,54 @@ def run_load_test(
     concurrency: int = 4,
     query: str = DEFAULT_QUERY,
     api_key: str = "",
-    request_func: Callable[[str, dict | None, dict | None], LoadSample] = _request_json,
+    profile: str = "standard",
+    workspace_id: str = "load-test",
+    large_upload_bytes: int = STANDARD_LARGE_UPLOAD_BYTES,
+    request_func: Callable[[str, dict | UploadPayload | None, dict | None], LoadSample] = _request_api,
 ) -> dict:
     base_url = base_url.rstrip("/")
     headers = {"X-API-Key": api_key} if api_key else {}
-    work: list[tuple[str, dict | None, dict | None]] = []
+    work: list[tuple[str, dict | UploadPayload | None, dict | None]] = []
+    if profile == "smoke":
+        requests_per_endpoint = SMOKE_REQUESTS_PER_ENDPOINT
+        concurrency = min(concurrency, SMOKE_CONCURRENCY)
+    if profile not in {"smoke", "standard", "abuse"}:
+        raise ValueError("profile must be smoke, standard, or abuse")
+
+    small_upload = UploadPayload(
+        filename="load-test.md",
+        content=b"# Vendor Policy\n\nVendor onboarding requires evidence and review.",
+        fields={"workspace_id": workspace_id, "access_roles": "public", "background": "true"},
+    )
+    large_upload = UploadPayload(
+        filename="oversized-load-test.md",
+        content=b"x" * large_upload_bytes,
+        fields={"workspace_id": workspace_id, "access_roles": "public", "background": "true"},
+    )
+    query_payload = {"query": query, "workspace_id": workspace_id, "retrieval_mode": "hybrid", "top_k": 4}
     for _ in range(requests_per_endpoint):
         work.append((f"{base_url}/health", None, None))
         work.append((f"{base_url}/metrics", None, None))
-        work.append(
-            (
-                f"{base_url}/query",
-                {"query": query, "retrieval_mode": "hybrid", "top_k": 4},
-                headers,
-            )
-        )
+        work.append((f"{base_url}/upload", small_upload, headers))
+        work.append((f"{base_url}/index-status?workspace_id={workspace_id}", None, headers))
+        work.append((f"{base_url}/query", query_payload, headers))
+        work.append((f"{base_url}/query/stream", query_payload, headers))
+        if profile == "abuse":
+            work.append((f"{base_url}/upload", large_upload, headers))
+            work.append((f"{base_url}/query", query_payload, headers))
 
     samples: list[LoadSample] = []
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = [executor.submit(request_func, url, payload, request_headers) for url, payload, request_headers in work]
         for future in as_completed(futures):
             samples.append(future.result())
-    return {"summary": summarize(samples), "samples": [asdict(sample) for sample in samples]}
+    return {
+        "profile": profile,
+        "concurrency": concurrency,
+        "requests_per_endpoint": requests_per_endpoint,
+        "summary": summarize(samples),
+        "samples": [asdict(sample) for sample in samples],
+    }
 
 
 def parse_args():
@@ -124,6 +189,9 @@ def parse_args():
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--query", default=DEFAULT_QUERY)
     parser.add_argument("--api-key", default="")
+    parser.add_argument("--profile", choices=["smoke", "standard", "abuse"], default="standard")
+    parser.add_argument("--workspace-id", default="load-test")
+    parser.add_argument("--large-upload-bytes", type=int, default=STANDARD_LARGE_UPLOAD_BYTES)
     parser.add_argument("--output", default="")
     return parser.parse_args()
 
@@ -136,6 +204,9 @@ def main() -> int:
         concurrency=args.concurrency,
         query=args.query,
         api_key=args.api_key,
+        profile=args.profile,
+        workspace_id=args.workspace_id,
+        large_upload_bytes=args.large_upload_bytes,
     )
     payload = json.dumps(report, indent=2, sort_keys=True)
     if args.output:
