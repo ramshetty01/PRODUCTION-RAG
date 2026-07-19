@@ -14,6 +14,7 @@ def _env_int(name: str, default: int) -> int:
 
 @dataclass(frozen=True)
 class RuntimeSettings:
+    environment: str = "local"
     host: str = "0.0.0.0"
     port: int = 8000
     vector_db_path: str = str(DEFAULT_DB_PATH)
@@ -97,7 +98,8 @@ def _setting_float(dotenv_values: dict[str, str], name: str, default: float) -> 
 
 def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
     dotenv_values = load_dotenv(dotenv_path) if dotenv_path else {}
-    return RuntimeSettings(
+    settings = RuntimeSettings(
+        environment=_setting_value(dotenv_values, "RAG_ENVIRONMENT", "local"),
         host=_setting_value(dotenv_values, "RAG_HOST", "0.0.0.0"),
         port=_setting_int(dotenv_values, "RAG_PORT", 8000),
         vector_db_path=_setting_value(dotenv_values, "RAG_VECTOR_DB_PATH", str(DEFAULT_DB_PATH)),
@@ -147,3 +149,9 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         observability_export_endpoint=_setting_value(dotenv_values, "RAG_OBSERVABILITY_EXPORT_ENDPOINT", ""),
         observability_export_api_key=_setting_value(dotenv_values, "RAG_OBSERVABILITY_EXPORT_API_KEY", ""),
     )
+    if settings.environment == "production" and (
+        settings.vector_db_path in {str(DEFAULT_DB_PATH), "./chroma_db", "chroma_db"}
+        or settings.manifest_path in {"data/processed/ingestion_manifest.json", "./data/processed/ingestion_manifest.json"}
+    ):
+        raise ValueError("production environment requires explicit non-local vector and manifest paths")
+    return settings

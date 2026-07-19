@@ -14,6 +14,10 @@ Verify the service:
 curl http://localhost:8000/health
 ```
 
+The compose stack is local-only by default. Use `deploy/staging.env.example`
+and `deploy/production.env.example` for hosted environments so data paths and
+secrets stay split.
+
 ## Kubernetes
 
 Build and publish an image for your cluster, then update
