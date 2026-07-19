@@ -17,8 +17,39 @@ These files are generated and should not be committed:
 - `chroma_db/`: local Chroma vector database.
 - `data/processed/ingestion_manifest.json`: document lifecycle manifest.
 - `logs/*.jsonl`: runtime logs and feedback.
+- `data/uploads/`: uploaded source files.
 
-If generated state is deleted, rebuild it from the source documents.
+In production, back up the manifest, vector DB, uploaded files, and logs
+together so document metadata, searchable vectors, source evidence, audit logs,
+feedback, and deletion proof stay consistent.
+
+## Backup
+
+Create an artifact from the project root:
+
+```bash
+tar -czf backups/rag-state-$(date +%Y%m%d%H%M%S).tgz \
+  data/processed/ingestion_manifest.json \
+  data/uploads \
+  chroma_db \
+  logs
+```
+
+Store the archive in encrypted object storage with retention and access logs.
+Do not include `.env`.
+
+## Restore
+
+Stop writes, restore the archive, then run the smoke check:
+
+```bash
+tar -xzf backups/rag-state-YYYYMMDDHHMMSS.tgz
+python scripts/restore_smoke.py
+python scripts/query.py "What is a GitHub Actions workflow?"
+```
+
+For managed vector databases, restore the provider snapshot first, then restore
+`data/processed/ingestion_manifest.json`, `data/uploads`, and `logs`.
 
 ## Rebuild ChromaDB
 
@@ -37,15 +68,26 @@ This recreates:
 - `chroma_db/`
 - `data/processed/ingestion_manifest.json`
 
+Use rebuild only when source documents are complete and a point-in-time vector
+snapshot is unavailable.
+
 ## Recovery Checks
 
 After rebuilding:
 
 ```bash
+python scripts/restore_smoke.py
 python scripts/query.py "What is a GitHub Actions workflow?"
 python -m pytest
 python evals/run_ragas.py --config configs/settings.toml
 ```
+
+## Deletion Proof
+
+Admin delete, workspace purge, and scheduled retention write audit events under
+`logs/audit.jsonl`. Workspace purge records `documents_deleted`,
+`files_deleted`, `vector_records_deleted`, `conversations_deleted`, and
+`logs_deleted` so operators can prove what was removed.
 
 ## Backup Notes
 

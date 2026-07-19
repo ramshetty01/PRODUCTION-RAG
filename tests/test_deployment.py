@@ -1,7 +1,41 @@
+import subprocess
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_restore_smoke_script_checks_restored_state(tmp_path):
+    manifest = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text('{"documents": {}}', encoding="utf-8")
+    vector_db = tmp_path / "chroma_db"
+    uploads = tmp_path / "data" / "uploads"
+    logs = tmp_path / "logs"
+    for path in [vector_db, uploads, logs]:
+        path.mkdir(parents=True)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "restore_smoke.py"),
+            "--manifest",
+            str(manifest),
+            "--vector-db",
+            str(vector_db),
+            "--uploads",
+            str(uploads),
+            "--logs",
+            str(logs),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert "manifest: ok" in result.stdout
 
 
 def test_dockerfile_starts_api_and_defines_healthcheck():

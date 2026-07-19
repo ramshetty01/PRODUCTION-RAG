@@ -104,6 +104,9 @@ def test_backup_recovery_documents_generated_state_and_rebuild():
 
     assert "chroma_db/" in recovery
     assert "data/processed/ingestion_manifest.json" in recovery
+    assert "data/uploads" in recovery
+    assert "python scripts/restore_smoke.py" in recovery
+    assert "Deletion Proof" in recovery
     assert "python scripts/ingest.py --pdf docs.pdf --build-vector-db" in recovery
     assert "evals/golden.jsonl" in recovery
     assert ".env" in recovery
