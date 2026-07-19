@@ -170,6 +170,7 @@ def test_demo_frontend_assets_are_served():
     assert 'type="module" src="/demo/app.js"' in page.text
     assert "chatMessages" in page.text
     assert "Upload documents to start asking questions." in page.text
+    assert "stopButton" in page.text
     assert "onboardingPanel" in page.text
     assert "Start your workspace" in page.text
     assert "Upload a document" in page.text
@@ -192,6 +193,12 @@ def test_demo_frontend_assets_are_served():
     assert "Indexing" in script.text
     assert "Ready" in script.text
     assert "renderChatMessage" in script.text
+    assert "renderAnswerActions" in script.text
+    assert "data-answer-action=\"copy\"" in script.text
+    assert "data-answer-action=\"retry\"" in script.text
+    assert "retryLastQuestion" in script.text
+    assert "stopAnswer" in script.text
+    assert "AbortController" in script.text
     assert "onboardingPanel" in script.text
     assert "Ready. Ask your first question." in script.text
     assert "Upload and index a corpus before asking." in script.text
@@ -222,6 +229,7 @@ def test_demo_frontend_assets_are_served():
     assert "Contact admin" in script.text
     assert "citation-toggle" in script.text
     assert "citation-detail" in script.text
+    assert "answer-actions" in styles.text
     assert "Open source" in script.text
     assert "feedbackForm" in page.text
     assert 'id="requestId" class="pill muted" hidden' in page.text
