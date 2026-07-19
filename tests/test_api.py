@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -199,6 +200,19 @@ def test_demo_frontend_assets_are_served():
     assert "lastPayload.request_id" in script.text
     assert ".workspace" in styles.text
     assert ".stage-topline" in styles.text
+    assert "--ds-color-bg" in styles.text
+    assert "--ds-space-4" in styles.text
+    assert "--ds-radius-md" in styles.text
+    assert "--ds-motion" in styles.text
+    assert ".ui-button" in styles.text
+    assert ".ui-input" in styles.text
+    assert ".ui-sidebar-item" in styles.text
+    assert ".ui-chat-bubble" in styles.text
+    assert ".ui-chip" in styles.text
+    assert ".ui-menu" in styles.text
+    assert ".ui-empty-state" in styles.text
+    assert ".ui-loading-state" in styles.text
+    assert ".ui-error-state" in styles.text
     assert ".auth-strip" in styles.text
     assert ".upload-form" in styles.text
     assert "min-height: 700px" in styles.text
@@ -1320,7 +1334,7 @@ def test_feedback_and_monitoring_endpoints(tmp_path, monkeypatch):
 
 
 def test_observability_dashboard_aggregates_operator_metrics(tmp_path, monkeypatch):
-    now = "2026-07-18T00:00:00+00:00"
+    now = datetime.now(UTC).isoformat()
     logs = tmp_path / "logs"
     logs.mkdir()
     (logs / "audit.jsonl").write_text(

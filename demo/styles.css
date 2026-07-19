@@ -59,6 +59,24 @@
   --font-heading: "SpurHeading", Arial, sans-serif;
   --font-body: "SpurBody", Arial, sans-serif;
   --font-mono: "SpurMono", "Courier New", ui-monospace, monospace;
+  --ds-color-bg: var(--bg);
+  --ds-color-surface: var(--glass-deep);
+  --ds-color-surface-soft: var(--glass);
+  --ds-color-text: var(--ink);
+  --ds-color-text-muted: var(--muted);
+  --ds-color-accent: var(--green);
+  --ds-color-danger: var(--danger);
+  --ds-space-1: 4px;
+  --ds-space-2: 8px;
+  --ds-space-3: 12px;
+  --ds-space-4: 16px;
+  --ds-space-5: 24px;
+  --ds-radius-sm: 6px;
+  --ds-radius-md: 8px;
+  --ds-radius-lg: 14px;
+  --ds-border: 1px solid var(--line);
+  --ds-shadow: var(--small-shadow);
+  --ds-motion: 160ms ease;
 }
 
 * {
@@ -128,6 +146,72 @@ h2,
 h3,
 p {
   margin: 0;
+}
+
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--ds-radius-md);
+  background: linear-gradient(135deg, var(--green), var(--green-deep));
+  color: #fff;
+  font: normal normal 400 0.75rem/1.5 var(--font-mono);
+  letter-spacing: 0;
+  text-transform: uppercase;
+  box-shadow: 0 12px 30px rgba(25, 195, 125, 0.28);
+  transition: transform var(--ds-motion), opacity var(--ds-motion);
+}
+
+.ui-input {
+  min-height: 44px;
+  border: var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--input);
+  color: var(--input-ink);
+  padding: 0 var(--ds-space-3);
+}
+
+.ui-sidebar-item,
+.ui-chip,
+.ui-menu {
+  border: var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ui-chat-bubble {
+  max-width: min(760px, 100%);
+  border-radius: var(--ds-radius-lg);
+  color: var(--ds-color-text);
+  padding: var(--ds-space-4);
+}
+
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: rgba(255, 255, 255, 0.78);
+  font: normal normal 400 0.75rem/1.5 var(--font-mono);
+  padding: 0 var(--ds-space-3);
+}
+
+.ui-empty-state,
+.ui-loading-state,
+.ui-error-state {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  border: var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-color-surface);
+  color: var(--ds-color-text-muted);
+  padding: var(--ds-space-5);
+}
+
+.ui-error-state {
+  color: #ffd4d2;
 }
 
 .shell {
