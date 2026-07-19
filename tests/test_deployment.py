@@ -15,11 +15,19 @@ def test_dockerfile_starts_api_and_defines_healthcheck():
 
 def test_env_example_documents_runtime_settings():
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    staging = (ROOT / "deploy" / "staging.env.example").read_text(encoding="utf-8")
+    production = (ROOT / "deploy" / "production.env.example").read_text(encoding="utf-8")
 
+    assert "RAG_ENVIRONMENT=local" in env_example
     assert "RAG_HOST=" in env_example
     assert "RAG_PORT=" in env_example
     assert "RAG_VECTOR_DB_PATH=" in env_example
     assert "RAG_EMBEDDING_MODEL=" in env_example
+    assert "RAG_ENVIRONMENT=staging" in staging
+    assert "/var/data/production-rag-staging" in staging
+    assert "RAG_ENVIRONMENT=production" in production
+    assert "/var/data/production-rag/chroma_db" in production
+    assert "replace-with-secret-manager-value" in production
 
 
 def test_deployment_docs_include_build_run_and_health_commands():
@@ -33,6 +41,11 @@ def test_deployment_docs_include_build_run_and_health_commands():
     assert "open http://localhost:8080/demo" in docs
     assert "RAG_LLM_ENDPOINT=http://rag-ollama:11434/v1/chat/completions" in docs
     assert "optional local `.env`" in docs
+    assert "cp deploy/staging.env.example .env.staging" in docs
+    assert "cp deploy/production.env.example .env.production" in docs
+    assert "python scripts/smoke_deploy.py https://staging-rag.example.com" in docs
+    assert "python scripts/smoke_deploy.py https://production-rag.example.com" in docs
+    assert "RAG_ENVIRONMENT=production" in docs
     assert "deploy/kubernetes" in docs
     assert "curl http://localhost:8000/health" in docs
 
@@ -47,6 +60,7 @@ def test_docker_compose_defines_persistent_api_service():
     assert "8080:8080" in compose
     assert "11434:11434" in compose
     assert "RAG_VECTOR_DB_PATH: /app/chroma_db" in compose
+    assert "RAG_ENVIRONMENT: local" in compose
     assert "path: ../.env" in compose
     assert "required: false" in compose
     assert "rag_chroma:/app/chroma_db" in compose
@@ -77,6 +91,7 @@ def test_kubernetes_manifests_define_production_runtime_contract():
     assert "kind: Service" in service
     assert "type: ClusterIP" in service
     assert "kind: ConfigMap" in configmap
+    assert "RAG_ENVIRONMENT: \"production\"" in configmap
     assert "RAG_VECTOR_DB_PATH: \"/app/chroma_db\"" in configmap
     assert "kind: Secret" in secret
     assert "RAG_API_KEYS:" in secret

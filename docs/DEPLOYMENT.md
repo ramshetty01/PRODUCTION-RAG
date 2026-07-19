@@ -39,6 +39,30 @@ The compose stack uses named volumes for local enterprise state:
 Compose loads `.env.example` first and then an optional local `.env`, so keep
 secrets in `.env` and commit only reference values.
 
+## Environment Split
+
+Do not share config, data directories, or secrets between staging and
+production. Use the checked-in examples as starting points:
+
+```bash
+cp deploy/staging.env.example .env.staging
+cp deploy/production.env.example .env.production
+```
+
+Staging uses `/var/data/production-rag-staging/...`; production uses
+`/var/data/production-rag/...`. Keep API keys, JWT secrets, and model keys in
+the deployment platform or secret manager, not in committed env files.
+
+Run smoke tests against each environment after deploy:
+
+```bash
+python scripts/smoke_deploy.py https://staging-rag.example.com
+python scripts/smoke_deploy.py https://production-rag.example.com
+```
+
+`RAG_ENVIRONMENT=production` refuses the local default vector and manifest
+paths, so `.env.example` cannot accidentally target production data.
+
 Run the ingestion worker profile when you want to seed the default corpus into
 the same volumes:
 
@@ -194,6 +218,8 @@ such as retrieval mode, Top K, retrieved chunk count, and citation count.
 Environment variables are documented in `.env.example`:
 
 - `RAG_HOST`: bind host for Uvicorn.
+- `RAG_ENVIRONMENT`: `local`, `staging`, or `production`; production requires
+  explicit non-local storage paths.
 - `RAG_PORT`: API port.
 - `RAG_VECTOR_DB_PATH`: generated ChromaDB directory.
 - `RAG_VECTOR_BACKEND`: `chroma` by default, or `qdrant` for a managed vector

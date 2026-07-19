@@ -1,9 +1,12 @@
+import pytest
+
 from src.rag.config import load_settings
 
 
 def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     for key in [
         "RAG_TOP_K",
+        "RAG_ENVIRONMENT",
         "RAG_RETRIEVAL_MODE",
         "RAG_CONVERSATION_MAX_TURNS",
         "RAG_RETENTION_DAYS",
@@ -42,6 +45,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
 
     settings = load_settings(dotenv_path=None)
 
+    assert settings.environment == "local"
     assert settings.top_k == 4
     assert settings.retrieval_mode == "reranked"
     assert settings.conversation_max_turns == 6
@@ -92,6 +96,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
         "\n".join(
             [
                 "RAG_VECTOR_DB_PATH=/tmp/chroma",
+                "RAG_ENVIRONMENT=staging",
                 "RAG_VECTOR_BACKEND=qdrant",
                 "RAG_VECTOR_COLLECTION=prod_chunks",
                 "RAG_QDRANT_URL=https://qdrant.example",
@@ -136,6 +141,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     settings = load_settings(dotenv)
 
     assert settings.vector_db_path == "/tmp/chroma"
+    assert settings.environment == "staging"
     assert settings.vector_backend == "qdrant"
     assert settings.vector_collection == "prod_chunks"
     assert settings.qdrant_url == "https://qdrant.example"
@@ -172,6 +178,16 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.observability_export_enabled is True
     assert settings.observability_export_endpoint == "https://observability.example.com/ingest"
     assert settings.observability_export_api_key == "obs-key"
+
+
+def test_production_environment_rejects_local_default_paths(tmp_path, monkeypatch):
+    monkeypatch.delenv("RAG_VECTOR_DB_PATH", raising=False)
+    monkeypatch.delenv("RAG_MANIFEST_PATH", raising=False)
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("RAG_ENVIRONMENT=production\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="production environment requires explicit non-local"):
+        load_settings(dotenv)
 
 
 def test_env_example_documents_required_runtime_settings():

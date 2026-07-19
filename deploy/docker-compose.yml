@@ -1,4 +1,5 @@
 x-rag-env: &rag-env
+  RAG_ENVIRONMENT: local
   RAG_HOST: 0.0.0.0
   RAG_VECTOR_DB_PATH: /app/chroma_db
   RAG_MANIFEST_PATH: /app/data/processed/ingestion_manifest.json
