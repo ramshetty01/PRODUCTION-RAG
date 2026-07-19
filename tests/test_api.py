@@ -528,6 +528,53 @@ def test_upload_endpoint_can_queue_background_ingestion(tmp_path, monkeypatch):
     assert status.json()["chunks_created"] > 0
 
 
+def test_ingestion_jobs_are_persisted_and_reloaded(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    routes.INGESTION_JOBS.clear()
+
+    routes._set_ingestion_job("job-a", job_id="job-a", workspace_id="workspace-a", status="queued", progress=0)
+    routes.INGESTION_JOBS.clear()
+    job = routes._get_ingestion_job("job-a")
+
+    assert job["status"] == "queued"
+    assert (tmp_path / "logs" / "ingestion_jobs.json").exists()
+
+
+def test_ingestion_job_retries_then_completes(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    routes.INGESTION_JOBS.clear()
+    calls = {"count": 0}
+
+    def flaky(*_args, **_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("embedding failed")
+        routes._set_ingestion_job("job-a", status="indexed", progress=100, chunks_created=1)
+
+    monkeypatch.setattr(routes, "_index_uploaded_file", flaky)
+
+    routes._run_ingestion_job("job-a", tmp_path / "policy.md", "policy.md", "workspace-a", ["public"])
+
+    job = routes._get_ingestion_job("job-a")
+    assert calls["count"] == 2
+    assert job["status"] == "indexed"
+    assert job["attempts"] == 2
+
+
+def test_ingestion_job_records_terminal_failure(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    routes.INGESTION_JOBS.clear()
+    monkeypatch.setattr(routes, "_index_uploaded_file", lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("parse failed")))
+
+    routes._run_ingestion_job("job-a", tmp_path / "bad.pdf", "bad.pdf", "workspace-a", ["public"])
+
+    job = routes._get_ingestion_job("job-a")
+    assert job["status"] == "failed"
+    assert job["attempts"] == 2
+    assert job["terminal"] is True
+    assert job["error"] == "We could not read this file."
+
+
 def test_index_status_reports_empty_ready_indexing_and_failed(tmp_path, monkeypatch):
     routes.INGESTION_JOBS.clear()
     manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
