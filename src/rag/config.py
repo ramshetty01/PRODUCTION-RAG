@@ -60,6 +60,7 @@ class RuntimeSettings:
     observability_export_enabled: bool = False
     observability_export_endpoint: str = ""
     observability_export_api_key: str = ""
+    secrets_file: str = ""
 
 
 def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
@@ -74,6 +75,19 @@ def load_dotenv(path: str | Path = ".env") -> dict[str, str]:
         key, value = line.split("=", 1)
         values[key.strip()] = value.strip()
     return values
+
+
+def load_secrets_file(path: str | Path = "") -> dict[str, str]:
+    if not path:
+        return {}
+    path = Path(path)
+    if not path.exists():
+        return {}
+    if path.suffix.lower() == ".json":
+        import json
+
+        return {str(key): str(value) for key, value in json.loads(path.read_text(encoding="utf-8")).items()}
+    return load_dotenv(path)
 
 
 def _setting_value(dotenv_values: dict[str, str], name: str, default: str) -> str:
@@ -99,6 +113,8 @@ def _setting_float(dotenv_values: dict[str, str], name: str, default: float) -> 
 
 def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
     dotenv_values = load_dotenv(dotenv_path) if dotenv_path else {}
+    secrets_file = os.getenv("RAG_SECRETS_FILE") or dotenv_values.get("RAG_SECRETS_FILE") or ""
+    dotenv_values = {**dotenv_values, **load_secrets_file(secrets_file)}
     settings = RuntimeSettings(
         environment=_setting_value(dotenv_values, "RAG_ENVIRONMENT", "local"),
         host=_setting_value(dotenv_values, "RAG_HOST", "0.0.0.0"),
@@ -150,6 +166,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         observability_export_enabled=_setting_bool(dotenv_values, "RAG_OBSERVABILITY_EXPORT_ENABLED", False),
         observability_export_endpoint=_setting_value(dotenv_values, "RAG_OBSERVABILITY_EXPORT_ENDPOINT", ""),
         observability_export_api_key=_setting_value(dotenv_values, "RAG_OBSERVABILITY_EXPORT_API_KEY", ""),
+        secrets_file=secrets_file,
     )
     if settings.environment == "production" and (
         settings.vector_db_path in {str(DEFAULT_DB_PATH), "./chroma_db", "chroma_db"}
