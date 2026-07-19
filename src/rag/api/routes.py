@@ -293,9 +293,36 @@ def _auth_context(
 
 
 def _admin_context(auth_context: AuthContext = Depends(_auth_context)) -> AuthContext:
-    if "admin" not in auth_context.roles:
+    if not (auth_context.roles & {"admin", "org-admin", "workspace-admin"}):
         raise HTTPException(status_code=403, detail="admin role required")
     return auth_context
+
+
+def _require_global_admin(auth_context: AuthContext) -> None:
+    if not (auth_context.roles & {"admin", "org-admin"}):
+        raise HTTPException(status_code=403, detail="org admin role required")
+
+
+def _require_workspace_admin(auth_context: AuthContext, workspace_id: str | None) -> None:
+    if auth_context.roles & {"admin", "org-admin"}:
+        return
+    if "workspace-admin" in auth_context.roles and workspace_id and auth_context.tenant_id == workspace_id:
+        return
+    raise HTTPException(status_code=403, detail="workspace admin role required")
+
+
+def _audit_admin_action(action: str, auth_context: AuthContext, workspace_id: str | None, target: str | None = None) -> None:
+    append_audit_event(
+        {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "event": action,
+            "subject": auth_context.subject,
+            "tenant_id": auth_context.tenant_id,
+            "workspace_id": workspace_id or "default",
+            "target": target,
+        },
+        _safe_api_path(DEFAULT_AUDIT_LOG),
+    )
 
 
 def _safe_api_path(path: str | Path) -> Path:
@@ -1197,6 +1224,11 @@ def index_status(workspace_id: str | None = None):
 
 @router.get("/admin/status", response_model=AdminStatusResponse)
 def admin_status(auth_context: AuthContext = Depends(_admin_context), workspace_id: str | None = None):
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    if safe_workspace_id:
+        _require_workspace_admin(auth_context, safe_workspace_id)
+    else:
+        _require_global_admin(auth_context)
     documents = [DocumentRecordResponse(**record) for record in _document_records(workspace_id)]
     failed_jobs = [document.model_dump() for document in documents if document.status not in {"indexed", "skipped"}]
     try:
@@ -1226,6 +1258,7 @@ def delete_document(
         raise HTTPException(status_code=404, detail="document not found")
     if safe_workspace_id and record.get("workspace_id") != safe_workspace_id:
         raise HTTPException(status_code=404, detail="document not found")
+    _require_workspace_admin(auth_context, record.get("workspace_id") or safe_workspace_id)
 
     vectorstore = load_vectorstore(_safe_api_path(persist_dir or SETTINGS.vector_db_path), settings=SETTINGS)
     delete_filter = {"document_id": document_id}
@@ -1238,6 +1271,7 @@ def delete_document(
     del manifest["documents"][document_id]
     save_manifest(manifest, manifest_path)
     _clear_query_cache()
+    _audit_admin_action("admin_document_delete", auth_context, record.get("workspace_id"), document_id)
     return DeleteDocumentResponse(
         document_id=document_id,
         status="deleted",
@@ -1254,6 +1288,7 @@ def purge_workspace(
     safe_workspace_id = _safe_workspace_id(workspace_id)
     if safe_workspace_id is None:
         raise HTTPException(status_code=400, detail="workspace_id is required")
+    _require_workspace_admin(auth_context, safe_workspace_id)
 
     manifest_path = _document_manifest_path()
     manifest = load_manifest(manifest_path)
@@ -1277,6 +1312,7 @@ def purge_workspace(
     _clear_query_cache()
     conversations_deleted = CONVERSATION_MEMORY.clear_workspace(safe_workspace_id)
     logs_deleted = _purge_logs() if SETTINGS.retention_purge_logs else 0
+    _audit_admin_action("admin_workspace_purge", auth_context, safe_workspace_id, safe_workspace_id)
     return PurgeWorkspaceResponse(
         workspace_id=safe_workspace_id,
         documents_deleted=len(records),
@@ -1292,6 +1328,8 @@ def run_retention(
     persist_dir: str | None = None,
     auth_context: AuthContext = Depends(_admin_context),
 ):
+    _require_global_admin(auth_context)
+    _audit_admin_action("admin_retention_run", auth_context, None, "retention")
     return _run_scheduled_retention(persist_dir)
 
 
@@ -1310,6 +1348,7 @@ def reindex_document(
         raise HTTPException(status_code=404, detail="document not found")
     if safe_workspace_id and record.get("workspace_id") != safe_workspace_id:
         raise HTTPException(status_code=404, detail="document not found")
+    _require_workspace_admin(auth_context, record.get("workspace_id") or safe_workspace_id)
 
     source_path = _safe_api_path(record["source_path"])
     if not source_path.exists():
@@ -1340,6 +1379,7 @@ def reindex_document(
     manifest["documents"][document_id]["access_roles"] = access_roles
     save_manifest(manifest, manifest_path)
     _clear_query_cache()
+    _audit_admin_action("admin_document_reindex", auth_context, workspace, document_id)
     return UploadIngestResponse(
         filename=record.get("filename") or source_path.name,
         saved_path=str(source_path),
@@ -1398,6 +1438,7 @@ def feedback_events(
     format: str = "json",
     auth_context: AuthContext = Depends(_admin_context),
 ):
+    _require_global_admin(auth_context)
     events = [event.__dict__ for event in load_feedback(_safe_api_path(DEFAULT_FEEDBACK_LOG))]
     if format == "csv":
         fields = ["created_at", "request_id", "query", "answer", "helpful", "citations", "latency_ms", "note"]
@@ -1419,6 +1460,11 @@ def observability_dashboard(
     workspace_id: str | None = None,
     auth_context: AuthContext = Depends(_admin_context),
 ):
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    if safe_workspace_id:
+        _require_workspace_admin(auth_context, safe_workspace_id)
+    else:
+        _require_global_admin(auth_context)
     return _observability_dashboard(window_minutes, workspace_id)
 
 
@@ -1428,6 +1474,7 @@ def audit_log(
     limit: int = 100,
     auth_context: AuthContext = Depends(_admin_context),
 ):
+    _require_global_admin(auth_context)
     events = load_audit_events(_safe_api_path(DEFAULT_AUDIT_LOG), limit=max(1, min(limit, 1000)))
     if format == "csv":
         return Response(audit_events_csv(events), media_type="text/csv")
