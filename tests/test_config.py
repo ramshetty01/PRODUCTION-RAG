@@ -33,6 +33,9 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_OTEL_ENABLED",
         "RAG_OTEL_SERVICE_NAME",
         "RAG_OTEL_EXPORTER_OTLP_ENDPOINT",
+        "RAG_OBSERVABILITY_EXPORT_ENABLED",
+        "RAG_OBSERVABILITY_EXPORT_ENDPOINT",
+        "RAG_OBSERVABILITY_EXPORT_API_KEY",
     ]:
         monkeypatch.delenv(key, raising=False)
 
@@ -66,6 +69,9 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.otel_enabled is False
     assert settings.otel_service_name == "production-rag"
     assert settings.otel_exporter_otlp_endpoint == ""
+    assert settings.observability_export_enabled is False
+    assert settings.observability_export_endpoint == ""
+    assert settings.observability_export_api_key == ""
 
 
 def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
@@ -116,6 +122,9 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_OTEL_ENABLED=true",
                 "RAG_OTEL_SERVICE_NAME=rag-test",
                 "RAG_OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318/v1/traces",
+                "RAG_OBSERVABILITY_EXPORT_ENABLED=true",
+                "RAG_OBSERVABILITY_EXPORT_ENDPOINT=https://observability.example.com/ingest",
+                "RAG_OBSERVABILITY_EXPORT_API_KEY=obs-key",
             ]
         ),
         encoding="utf-8",
@@ -156,6 +165,9 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.otel_enabled is True
     assert settings.otel_service_name == "rag-test"
     assert settings.otel_exporter_otlp_endpoint == "http://collector:4318/v1/traces"
+    assert settings.observability_export_enabled is True
+    assert settings.observability_export_endpoint == "https://observability.example.com/ingest"
+    assert settings.observability_export_api_key == "obs-key"
 
 
 def test_env_example_documents_required_runtime_settings():
@@ -189,3 +201,6 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_OTEL_ENABLED=" in env_example
     assert "RAG_OTEL_SERVICE_NAME=" in env_example
     assert "RAG_OTEL_EXPORTER_OTLP_ENDPOINT=" in env_example
+    assert "RAG_OBSERVABILITY_EXPORT_ENABLED=" in env_example
+    assert "RAG_OBSERVABILITY_EXPORT_ENDPOINT=" in env_example
+    assert "RAG_OBSERVABILITY_EXPORT_API_KEY=" in env_example
