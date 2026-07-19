@@ -18,13 +18,17 @@ function headers() {
 }
 
 function row(document) {
+  const failed = document.error ? `<span>${document.error}</span>` : "";
   return `
     <div class="admin-row">
       <div>
         <strong>${document.filename || document.document_id}</strong>
-        <span>${document.document_id} · ${document.status} · ${document.chunk_count} chunks</span>
+        <span>${document.document_id} · ${document.status} · ${document.chunk_count} chunks · ${document.workspace_id || "default"} · ${document.owner || "unknown"}</span>
+        <span>${document.ingested_at || "No upload time"}</span>
+        ${failed}
       </div>
       <div class="admin-actions">
+        <button type="button" data-action="rename" data-id="${document.document_id}" data-name="${document.filename || document.document_id}">Rename</button>
         <button type="button" data-action="reindex" data-id="${document.document_id}">Reindex</button>
         <button type="button" data-action="delete" data-id="${document.document_id}">Delete</button>
       </div>
@@ -83,7 +87,17 @@ documents.addEventListener("click", async (event) => {
   if (!button) return;
   const action = button.dataset.action;
   const id = button.dataset.id;
-  await adminRequest(`/documents/${id}${action === "reindex" ? "/reindex" : ""}`, {method: action === "delete" ? "DELETE" : "POST"});
+  if (action === "rename") {
+    const filename = window.prompt("Rename document", button.dataset.name || id);
+    if (!filename) return;
+    await adminRequest(`/documents/${id}`, {
+      method: "PATCH",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({filename}),
+    });
+  } else {
+    await adminRequest(`/documents/${id}${action === "reindex" ? "/reindex" : ""}`, {method: action === "delete" ? "DELETE" : "POST"});
+  }
   await load();
 });
 

@@ -324,6 +324,8 @@ def test_admin_console_assets_are_served():
     assert "/usage" in script.text
     assert "/audit" in script.text
     assert "/feedback/events" in script.text
+    assert "data-action=\"rename\"" in script.text
+    assert "PATCH" in script.text
     assert "data-action=\"reindex\"" in script.text
     assert ".admin-table" in styles.text
 
@@ -663,6 +665,7 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
       "error": null,
       "filename": "policy.md",
       "ingested_at": "2026-07-17T00:00:00Z",
+      "owner": "owner-a",
       "previous_version": null,
       "source_path": "%s",
       "status": "indexed",
@@ -716,6 +719,12 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
     listed = client.get("/documents", params={"workspace_id": "workspace-a"})
     blocked = client.post("/documents/policy/reindex", params={"workspace_id": "workspace-a"})
     status = client.get("/admin/status", headers={"X-API-Key": "admin-key"}, params={"workspace_id": "workspace-a"})
+    renamed = client.patch(
+        "/documents/policy",
+        headers={"X-API-Key": "admin-key"},
+        params={"workspace_id": "workspace-a"},
+        json={"filename": "Renamed Policy.md"},
+    )
     reindexed = client.post(
         "/documents/policy/reindex",
         headers={"X-API-Key": "admin-key"},
@@ -729,9 +738,14 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
 
     assert listed.status_code == 200
     assert listed.json()["documents"][0]["document_id"] == "policy"
+    assert listed.json()["documents"][0]["owner"] == "owner-a"
+    assert listed.json()["documents"][0]["workspace_id"] == "workspace-a"
+    assert listed.json()["documents"][0]["ingested_at"] == "2026-07-17T00:00:00Z"
     assert blocked.status_code == 401
     assert status.status_code == 200
     assert status.json()["index"]["document_count"] == 1
+    assert renamed.status_code == 200
+    assert renamed.json()["filename"] == "Renamed_Policy.md"
     assert reindexed.status_code == 200
     assert reindexed.json()["document_version"] == "v2"
     assert built["chunks"][0].metadata["workspace_id"] == "workspace-a"
@@ -742,6 +756,46 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
         "vector_records_deleted": 3,
     }
     assert not source.exists()
+
+
+def test_document_list_exposes_failed_reason_and_retry_action(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "bad.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Bad", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "bad": {
+                        "chunk_count": 0,
+                        "content_hash": "hash",
+                        "document_id": "bad",
+                        "document_version": "v1",
+                        "error": "Could not parse PDF",
+                        "filename": "bad.md",
+                        "ingested_at": "2026-07-17T00:00:00Z",
+                        "previous_version": None,
+                        "source_path": str(source),
+                        "status": "failed",
+                        "workspace_id": "workspace-a",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest_path)))
+    client = TestClient(routes.create_app())
+
+    response = client.get("/documents", params={"workspace_id": "workspace-a"})
+
+    assert response.status_code == 200
+    document = response.json()["documents"][0]
+    assert document["error"] == "Could not parse PDF"
+    assert document["retry_action"] == "reindex"
 
 
 def test_admin_permissions_are_scoped_by_workspace_and_org(tmp_path, monkeypatch):
