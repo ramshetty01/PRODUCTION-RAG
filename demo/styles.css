@@ -230,6 +230,178 @@ p {
   backdrop-filter: blur(22px);
 }
 
+.saas-shell {
+  display: grid;
+  grid-template-columns: 292px minmax(0, 1fr);
+}
+
+.app-sidebar {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: calc(100vh - 56px);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(4, 8, 7, 0.72);
+  padding: 22px;
+}
+
+.sidebar-brand {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 18px;
+}
+
+.sidebar-brand strong,
+.profile-menu strong {
+  color: #fff;
+  font: normal normal 400 0.9375rem/1.35 var(--font-body);
+}
+
+.sidebar-brand span,
+.profile-menu span,
+.chat-history p {
+  color: rgba(255, 255, 255, 0.54);
+  font: normal normal 400 0.75rem/1.5 var(--font-mono);
+  text-transform: uppercase;
+}
+
+.new-chat-button {
+  width: 100%;
+  margin-bottom: 22px;
+}
+
+.chat-history {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow: auto;
+}
+
+.chat-history p {
+  margin-top: 12px;
+}
+
+.ui-sidebar-item {
+  width: 100%;
+  min-height: 38px;
+  color: rgba(255, 255, 255, 0.78);
+  text-align: left;
+  padding: 0 12px;
+}
+
+.ui-sidebar-item.is-active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.profile-menu {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 12px;
+}
+
+.profile-menu button {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  text-align: left;
+  padding: 5px 0;
+}
+
+.saas-main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+}
+
+.chat-pane {
+  display: grid;
+  grid-template-rows: auto auto minmax(220px, 1fr) auto;
+  gap: 18px;
+  min-height: calc(100vh - 132px);
+  padding: 42px min(7vw, 92px) 24px;
+}
+
+.chat-intro {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.chat-intro h1 {
+  font-size: 4rem;
+}
+
+.chat-messages {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  overflow: auto;
+  padding: 4px 0 12px;
+}
+
+.chat-message {
+  display: flex;
+}
+
+.chat-message.user {
+  justify-content: flex-end;
+}
+
+.chat-message.assistant {
+  justify-content: flex-start;
+}
+
+.chat-message.user .ui-chat-bubble {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chat-message.assistant .ui-chat-bubble {
+  background: rgba(8, 18, 15, 0.78);
+  border: var(--ds-border);
+}
+
+.chat-message p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.citation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.composer-stack {
+  display: grid;
+  gap: 10px;
+  border: var(--ds-border);
+  border-radius: 14px;
+  background: rgba(4, 8, 7, 0.82);
+  padding: 12px;
+  box-shadow: var(--ds-shadow);
+}
+
+.chat-composer {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.chat-composer .query-box {
+  grid-column: 1;
+}
+
+.chat-composer .query-actions {
+  grid-column: 2;
+  grid-template-columns: 112px;
+}
+
+.composer-stack .upload-form {
+  grid-template-columns: minmax(0, 1fr) 108px minmax(140px, 0.4fr);
+  margin-top: 0;
+}
+
 .product-bar {
   display: flex;
   align-items: center;
@@ -870,8 +1042,24 @@ h3 {
   }
 
   .product-bar,
-  .workspace {
+  .workspace,
+  .saas-shell {
     grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .chat-history {
+    max-height: 220px;
+  }
+
+  .chat-pane {
+    min-height: auto;
+    padding: 30px;
   }
 
   .product-bar {
@@ -899,11 +1087,18 @@ h3 {
 
   .scenario-row,
   .query-actions,
+  .chat-composer,
   .auth-strip,
   .filter-strip,
   .upload-form,
+  .composer-stack .upload-form,
   .ops-bar {
     grid-template-columns: 1fr;
+  }
+
+  .chat-composer .query-box,
+  .chat-composer .query-actions {
+    grid-column: auto;
   }
 
   .workspace {

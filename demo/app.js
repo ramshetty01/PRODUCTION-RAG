@@ -38,6 +38,7 @@ const metricStatus = document.querySelector("#metricStatus");
 const feedbackForm = document.querySelector("#feedbackForm");
 const feedbackNote = document.querySelector("#feedbackNote");
 const feedbackStatus = document.querySelector("#feedbackStatus");
+const chatMessages = document.querySelector("#chatMessages");
 const workspaceId = localStorage.getItem("rag_workspace_id") || crypto.randomUUID();
 const sessionId = localStorage.getItem("rag_session_id") || crypto.randomUUID();
 const savedAuthType = localStorage.getItem("rag_auth_type") || "none";
@@ -115,6 +116,45 @@ function authErrorMessage(status, payload) {
   return typeof payload.detail === "string" ? payload.detail : payload.detail?.message;
 }
 
+function indexingLabel(status) {
+  return {
+    queued: "Uploading",
+    parsing: "Reading document",
+    chunking: "Chunking",
+    embedding: "Indexing",
+    indexed: "Ready",
+    failed: "Indexing failed",
+  }[status] || "Scanning";
+}
+
+function renderChatMessage(role, content, citationItems = []) {
+  chatMessages.querySelector(".ui-empty-state")?.remove();
+  const message = document.createElement("article");
+  message.className = `chat-message ${role}`;
+  const bubble = document.createElement("div");
+  bubble.className = "ui-chat-bubble";
+  const body = document.createElement("p");
+  body.textContent = text(content);
+  bubble.append(body);
+  if (citationItems.length) {
+    const chips = document.createElement("div");
+    chips.className = "citation-chips";
+    for (const item of citationItems) {
+      const chip = document.createElement("a");
+      chip.className = "ui-chip";
+      chip.href = item.source_url || "#";
+      chip.target = "_blank";
+      chip.rel = "noreferrer";
+      chip.textContent = text(item.label || item.source);
+      chips.append(chip);
+    }
+    bubble.append(chips);
+  }
+  message.append(bubble);
+  chatMessages.append(message);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
 function renderCitations(items) {
   mergeState({citations: items});
   citations.innerHTML = "";
@@ -160,6 +200,7 @@ function renderCitations(items) {
 function renderResult(payload) {
   mergeState({chat: {lastPayload: payload, error: null}});
   answerText.textContent = payload.answer || "The answer is not available in the retrieved context.";
+  renderChatMessage("assistant", answerText.textContent, payload.citations || []);
   requestId.textContent = payload.request_id || "No request";
   cacheBadge.textContent = payload.cached ? "Cached" : "Fresh";
   cacheBadge.className = `pill ${payload.cached ? "" : "muted"}`.trim();
@@ -178,6 +219,7 @@ function renderResult(payload) {
 function renderError(error) {
   mergeState({chat: {lastPayload: null, error}, errors: [...appState.errors, error]});
   answerText.textContent = error;
+  renderChatMessage("assistant", error);
   requestId.textContent = "Request failed";
   requestId.className = "pill error";
   renderCitations([]);
@@ -389,6 +431,7 @@ async function askQuestion(event) {
 
   try {
     const body = queryBody();
+    renderChatMessage("user", body.query);
     const response = await fetch("/query/stream", {
       method: "POST",
       headers,
@@ -427,7 +470,7 @@ async function uploadDocument(event) {
   }
 
   uploadButton.disabled = true;
-  uploadButton.textContent = "Indexing";
+  uploadButton.textContent = "Scanning";
   uploadStatus.textContent = file.name;
   mergeState({upload: {status: "indexing", message: file.name}});
   renderIndexReadiness({ready: false, status: "indexing", message: "Indexing corpus before chat is enabled."});
@@ -451,7 +494,7 @@ async function uploadDocument(event) {
       throw new Error(authErrorMessage(response.status, payload) || `HTTP ${response.status}`);
     }
     const finalPayload = payload.job_id ? await pollIngestionJob(payload.job_id) : payload;
-    uploadStatus.textContent = `${finalPayload.chunks_created} chunks indexed`;
+    uploadStatus.textContent = `${indexingLabel(finalPayload.status)} - ${finalPayload.chunks_created} chunks`;
     mergeState({upload: {status: "indexed", message: uploadStatus.textContent, jobId: finalPayload.job_id || null, chunks: finalPayload.chunks_created}});
     await refreshDocuments();
     await refreshIndexReadiness();
@@ -477,7 +520,7 @@ async function pollIngestionJob(jobId) {
     if (!response.ok) {
       throw new Error(payload.detail || `HTTP ${response.status}`);
     }
-    uploadStatus.textContent = `${payload.status} - ${payload.progress}%`;
+    uploadStatus.textContent = `${indexingLabel(payload.status)} - ${payload.progress}%`;
     renderIndexReadiness({
       ready: false,
       status: payload.status === "failed" ? "failed" : "indexing",
