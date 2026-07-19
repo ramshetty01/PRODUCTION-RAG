@@ -59,6 +59,9 @@ RAG_QDRANT_API_KEY=replace-me
 
 The Qdrant backend requires the optional `langchain-qdrant` package. Keep
 Chroma for local CI and demos unless you are validating a real remote index.
+Uploaded chunks preserve `workspace_id`, `document_id`, `document_version`, and
+`access_roles` metadata. Retrieval filters by workspace and role in the app
+boundary, and deletion uses the same metadata filter against Chroma or Qdrant.
 
 ## Migration Triggers
 

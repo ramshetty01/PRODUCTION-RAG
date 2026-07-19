@@ -132,6 +132,21 @@ def count_records(vectorstore) -> int:
 
 def delete_records_by_metadata(vectorstore, metadata_filter: dict) -> int | None:
     if not hasattr(vectorstore, "_collection"):
+        client = getattr(vectorstore, "client", None)
+        collection_name = getattr(vectorstore, "collection_name", None) or getattr(vectorstore, "_collection_name", None)
+        if client is not None and collection_name:
+            try:
+                from qdrant_client import models
+            except ImportError as exc:
+                raise TypeError("Qdrant metadata delete requires qdrant-client") from exc
+            points_filter = models.Filter(
+                must=[
+                    models.FieldCondition(key=key, match=models.MatchValue(value=value))
+                    for key, value in metadata_filter.items()
+                ]
+            )
+            client.delete(collection_name=collection_name, points_selector=points_filter)
+            return None
         raise TypeError("vector store does not expose a supported metadata delete API")
     before = count_records(vectorstore)
     vectorstore._collection.delete(where=metadata_filter)
