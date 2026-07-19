@@ -62,6 +62,11 @@ python scripts/smoke_deploy.py https://staging-rag.example.com
 python scripts/smoke_deploy.py https://production-rag.example.com
 ```
 
+Background ingestion jobs are persisted to `logs/ingestion_jobs.json` in the
+local runtime. The API retries a failed background job once, records `attempts`,
+and marks unrecoverable jobs as terminal with a user-facing reason. For larger
+deployments, point this same boundary at Redis/RQ, Celery, or Arq.
+
 `RAG_ENVIRONMENT=production` refuses the local default vector and manifest
 paths, so `.env.example` cannot accidentally target production data.
 

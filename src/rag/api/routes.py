@@ -205,6 +205,8 @@ class IngestionJobResponse(BaseModel):
     chunks_created: int = 0
     vector_records: int | None = None
     error: str | None = None
+    attempts: int = 0
+    terminal: bool = False
 
 
 class DocumentRecordResponse(BaseModel):
@@ -292,6 +294,7 @@ MANAGED_OBSERVABILITY = configure_managed_observability(SETTINGS)
 CONVERSATION_MEMORY = ConversationMemoryStore(max_turns=SETTINGS.conversation_max_turns)
 INGESTION_JOBS: dict[str, dict] = {}
 INGESTION_JOB_LOCK = threading.Lock()
+DEFAULT_INGESTION_JOBS_PATH = Path("logs/ingestion_jobs.json")
 MODEL_ERROR_COUNT = 0
 RETENTION_THREAD_STARTED = False
 
@@ -474,15 +477,36 @@ def _classify_ingestion_error(exc: Exception) -> dict:
 def _set_ingestion_job(job_key: str, **updates) -> None:
     with INGESTION_JOB_LOCK:
         INGESTION_JOBS[job_key] = {**INGESTION_JOBS.get(job_key, {}), **updates}
+        _persist_ingestion_jobs_unlocked()
+
+
+def _ingestion_jobs_path() -> Path:
+    return _safe_api_path(DEFAULT_INGESTION_JOBS_PATH)
+
+
+def _persist_ingestion_jobs_unlocked() -> None:
+    path = _ingestion_jobs_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(INGESTION_JOBS, sort_keys=True), encoding="utf-8")
+
+
+def _load_ingestion_jobs() -> None:
+    path = _ingestion_jobs_path()
+    if not path.exists():
+        return
+    with INGESTION_JOB_LOCK:
+        INGESTION_JOBS.update(json.loads(path.read_text(encoding="utf-8")))
 
 
 def _get_ingestion_job(job_id: str) -> dict | None:
+    _load_ingestion_jobs()
     with INGESTION_JOB_LOCK:
         job = INGESTION_JOBS.get(job_id)
         return dict(job) if job else None
 
 
 def _ingestion_jobs_for_workspace(workspace_id: str | None) -> list[dict]:
+    _load_ingestion_jobs()
     with INGESTION_JOB_LOCK:
         jobs = [dict(job) for job in INGESTION_JOBS.values()]
     if workspace_id:
@@ -797,13 +821,20 @@ def _index_uploaded_file(
 
 
 def _run_ingestion_job(job_id: str, saved_path: Path, safe_name: str, workspace_id: str | None, access_roles: list[str], owner: str | None = None) -> None:
-    try:
-        _index_uploaded_file(saved_path, safe_name, workspace_id, access_roles, owner=owner, job_id=job_id)
-    except Exception as exc:
-        LOGGER.exception("Background ingestion job failed", extra={"job_id": job_id})
-        detail = _classify_ingestion_error(exc)
-        MANAGED_OBSERVABILITY.export_log({"event": "ingestion_failed", "job_id": job_id, "error": detail["code"]})
-        _set_ingestion_job(job_id, status="failed", progress=100, error=detail["message"])
+    max_attempts = 2
+    for attempt in range(1, max_attempts + 1):
+        _set_ingestion_job(job_id, attempts=attempt)
+        try:
+            _index_uploaded_file(saved_path, safe_name, workspace_id, access_roles, owner=owner, job_id=job_id)
+            return
+        except Exception as exc:
+            LOGGER.exception("Background ingestion job failed", extra={"job_id": job_id, "attempt": attempt})
+            detail = _classify_ingestion_error(exc)
+            if attempt < max_attempts:
+                _set_ingestion_job(job_id, status="queued", progress=0, error=detail["message"], retry_after="immediate")
+                continue
+            MANAGED_OBSERVABILITY.export_log({"event": "ingestion_failed", "job_id": job_id, "error": detail["code"]})
+            _set_ingestion_job(job_id, status="failed", progress=100, error=detail["message"], terminal=True)
 
 
 def _retention_days_for_record(record: dict) -> int:
