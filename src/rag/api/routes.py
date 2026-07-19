@@ -339,6 +339,17 @@ def _require_workspace_admin(auth_context: AuthContext, workspace_id: str | None
     raise HTTPException(status_code=403, detail="workspace admin role required")
 
 
+def _tenant_scoped_workspace_id(workspace_id: str | None, auth_context: AuthContext) -> str | None:
+    safe_workspace_id = _safe_workspace_id(workspace_id)
+    if auth_context.roles & {"admin", "org-admin"}:
+        return safe_workspace_id
+    if auth_context.tenant_id == "default":
+        return safe_workspace_id
+    if safe_workspace_id and safe_workspace_id != auth_context.tenant_id:
+        raise HTTPException(status_code=404, detail="workspace not found")
+    return auth_context.tenant_id
+
+
 def _audit_admin_action(action: str, auth_context: AuthContext, workspace_id: str | None, target: str | None = None, extra: dict | None = None) -> None:
     append_audit_event(
         {
@@ -680,9 +691,9 @@ def _safe_access_roles(access_roles: str | None) -> list[str]:
     return sorted(set(roles))
 
 
-def _effective_metadata_filters(request: QueryRequest) -> dict:
+def _effective_metadata_filters(request: QueryRequest, auth_context: AuthContext | None = None) -> dict:
     metadata_filters = dict(request.metadata_filters or {})
-    workspace_id = _safe_workspace_id(request.workspace_id)
+    workspace_id = _tenant_scoped_workspace_id(request.workspace_id, auth_context) if auth_context else _safe_workspace_id(request.workspace_id)
     if workspace_id:
         metadata_filters["workspace_id"] = workspace_id
     return metadata_filters
@@ -965,7 +976,7 @@ def _retrieve_for_request(query: str, request: QueryRequest, vectorstore, auth_c
         documents=documents,
         top_k=request.top_k,
         reranker=reranker,
-        metadata_filters=_effective_metadata_filters(request),
+        metadata_filters=_effective_metadata_filters(request, auth_context),
         user_roles=auth_context.roles,
     )
 
@@ -983,7 +994,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
         raise HTTPException(status_code=429, detail="rate limit exceeded")
 
     safe_session_id = _safe_session_id(request.session_id)
-    safe_workspace_id = _safe_workspace_id(request.workspace_id)
+    safe_workspace_id = _tenant_scoped_workspace_id(request.workspace_id, auth_context)
     conversation_turns = CONVERSATION_MEMORY.get(safe_session_id, safe_workspace_id, auth_context.cache_scope())
     retrieval_query = build_contextual_query(safe_query, conversation_turns)
     event = TraceEvent(
@@ -993,7 +1004,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
         rewritten_query=retrieval_query,
     )
     cache_filters = {
-        **_effective_metadata_filters(request),
+        **_effective_metadata_filters(request, auth_context),
         "_retrieval_mode": requested_mode,
         "_auth_scope": auth_context.cache_scope(),
         "_session_id": safe_session_id,
@@ -1296,7 +1307,7 @@ async def upload_document(
     background: bool = Form(default=False),
     auth_context: AuthContext = Depends(_auth_context),
 ):
-    safe_workspace_id = _safe_workspace_id(workspace_id)
+    safe_workspace_id = _tenant_scoped_workspace_id(workspace_id, auth_context)
     safe_access_roles = _safe_access_roles(access_roles)
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
@@ -1407,21 +1418,24 @@ async def upload_document(
 
 
 @router.get("/ingestion-jobs/{job_id}", response_model=IngestionJobResponse)
-def ingestion_job(job_id: str):
+def ingestion_job(job_id: str, auth_context: AuthContext = Depends(_auth_context)):
     job = _get_ingestion_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="ingestion job not found")
+    _tenant_scoped_workspace_id(job.get("workspace_id"), auth_context)
     return IngestionJobResponse(**job)
 
 
 @router.get("/documents", response_model=DocumentListResponse)
-def list_documents(workspace_id: str | None = None):
-    return DocumentListResponse(documents=[DocumentRecordResponse(**record) for record in _document_records(workspace_id)])
+def list_documents(workspace_id: str | None = None, auth_context: AuthContext = Depends(_auth_context)):
+    safe_workspace_id = _tenant_scoped_workspace_id(workspace_id, auth_context)
+    return DocumentListResponse(documents=[DocumentRecordResponse(**record) for record in _document_records(safe_workspace_id)])
 
 
 @router.get("/index-status", response_model=IndexReadinessResponse)
-def index_status(workspace_id: str | None = None):
-    return _index_readiness(workspace_id)
+def index_status(workspace_id: str | None = None, auth_context: AuthContext = Depends(_auth_context)):
+    safe_workspace_id = _tenant_scoped_workspace_id(workspace_id, auth_context)
+    return _index_readiness(safe_workspace_id)
 
 
 @router.get("/admin/status", response_model=AdminStatusResponse)
