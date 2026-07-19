@@ -304,14 +304,66 @@ def test_admin_console_assets_are_served():
     assert "Admin Console" in page.text
     assert "adminCredential" in page.text
     assert "observabilityDashboard" in page.text
+    assert "usageDashboard" in page.text
     assert "auditEvents" in page.text
     assert "feedbackEvents" in page.text
     assert "/admin/status" in script.text
     assert "/observability/dashboard?window_minutes=60" in script.text
+    assert "/usage" in script.text
     assert "/audit" in script.text
     assert "/feedback/events" in script.text
     assert "data-action=\"reindex\"" in script.text
     assert ".admin-table" in styles.text
+
+
+def test_usage_endpoint_aggregates_by_workspace_and_requires_admin(tmp_path, monkeypatch):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "usage.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "created_at": "2026-07-19T00:00:00+00:00",
+                        "request_id": "req-1",
+                        "subject": "user-a",
+                        "org_id": "org-a",
+                        "workspace_id": "workspace-a",
+                        "prompt_tokens": 10,
+                        "answer_tokens": 5,
+                        "estimated_cost": 0.01,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "created_at": "2026-07-19T00:00:00+00:00",
+                        "request_id": "req-2",
+                        "subject": "user-b",
+                        "org_id": "org-b",
+                        "workspace_id": "workspace-b",
+                        "prompt_tokens": 20,
+                        "answer_tokens": 5,
+                        "estimated_cost": 0.02,
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin,workspace-key:public|workspace-admin:workspace-a"))
+    client = TestClient(routes.create_app())
+
+    blocked = client.get("/usage")
+    workspace = client.get("/usage", headers={"X-API-Key": "workspace-key"}, params={"workspace_id": "workspace-a"})
+    global_usage = client.get("/usage", headers={"X-API-Key": "admin-key"})
+
+    assert blocked.status_code == 401
+    assert workspace.status_code == 200
+    assert workspace.json()["usage"]["total_tokens"] == 15
+    assert global_usage.json()["usage"]["total_requests"] == 2
+    assert global_usage.json()["usage"]["by_org"]["org-b"]["estimated_cost"] == 0.02
 
 
 def test_source_open_endpoint_serves_safe_files(tmp_path, monkeypatch):

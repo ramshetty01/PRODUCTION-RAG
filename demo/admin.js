@@ -11,6 +11,7 @@ const feedbackEvents = document.querySelector("#feedbackEvents");
 const feedbackCsv = document.querySelector("#feedbackCsv");
 const dashboard = document.querySelector("#observabilityDashboard");
 const dashboardWindow = document.querySelector("#dashboardWindow");
+const usageDashboard = document.querySelector("#usageDashboard");
 
 function headers() {
   return credential.value.trim() ? {"X-API-Key": credential.value.trim()} : {};
@@ -44,6 +45,7 @@ async function load() {
   statusText.textContent = "Loading";
   const payload = await adminRequest("/admin/status");
   const observability = await adminRequest("/observability/dashboard?window_minutes=60");
+  const usage = await adminRequest("/usage");
   const audit = await adminRequest("/audit");
   const feedback = await adminRequest("/feedback/events");
   health.textContent = `API ${payload.health.api}`;
@@ -59,6 +61,11 @@ async function load() {
     ["Index health", observability.index_health.status],
     ["Model errors", observability.model.errors],
     ["Ingestion failures", observability.ingestion.failed_jobs + observability.ingestion.failed_documents],
+  ].map(([label, value]) => `<div class="admin-row"><strong>${label}</strong><span>${value}</span></div>`).join("");
+  usageDashboard.innerHTML = [
+    ["Requests", usage.usage.total_requests],
+    ["Tokens", usage.usage.total_tokens],
+    ["Estimated cost", usage.usage.estimated_cost],
   ].map(([label, value]) => `<div class="admin-row"><strong>${label}</strong><span>${value}</span></div>`).join("");
   auditCsv.href = "/audit?format=csv";
   auditEvents.innerHTML = audit.events.length
