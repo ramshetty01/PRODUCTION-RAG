@@ -676,6 +676,83 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
     assert not source.exists()
 
 
+def test_admin_permissions_are_scoped_by_workspace_and_org(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "policy.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Policy", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "policy": {
+                        "chunk_count": 1,
+                        "content_hash": "hash",
+                        "document_id": "policy",
+                        "document_version": "v1",
+                        "error": None,
+                        "filename": "policy.md",
+                        "ingested_at": "2026-07-17T00:00:00Z",
+                        "previous_version": None,
+                        "source_path": str(source),
+                        "status": "indexed",
+                        "workspace_id": "workspace-a",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeCollection:
+        def __init__(self):
+            self.count_value = 2
+
+        def count(self):
+            return self.count_value
+
+        def delete(self, where):
+            self.count_value = 0
+
+    class FakeVectorStore:
+        def __init__(self):
+            self._collection = FakeCollection()
+
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(manifest_path=str(manifest_path), vector_db_path=str(tmp_path / "chroma_db")),
+    )
+    monkeypatch.setattr(
+        routes,
+        "AUTH_CONTEXTS",
+        routes.parse_api_keys(
+            "public-key:public,workspace-key:public|workspace-admin:workspace-a,org-key:public|org-admin:org-a"
+        ),
+    )
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    non_admin = client.get("/admin/status", headers={"X-API-Key": "public-key"}, params={"workspace_id": "workspace-a"})
+    workspace_ok = client.get("/admin/status", headers={"X-API-Key": "workspace-key"}, params={"workspace_id": "workspace-a"})
+    workspace_blocked = client.get("/admin/status", headers={"X-API-Key": "workspace-key"}, params={"workspace_id": "workspace-b"})
+    global_blocked = client.get("/admin/status", headers={"X-API-Key": "workspace-key"})
+    org_ok = client.get("/admin/status", headers={"X-API-Key": "org-key"})
+    deleted = client.delete("/documents/policy", headers={"X-API-Key": "workspace-key"})
+
+    assert non_admin.status_code == 403
+    assert workspace_ok.status_code == 200
+    assert workspace_blocked.status_code == 403
+    assert global_blocked.status_code == 403
+    assert org_ok.status_code == 200
+    assert deleted.status_code == 200
+    audit = (tmp_path / "logs" / "audit.jsonl").read_text(encoding="utf-8")
+    assert "admin_document_delete" in audit
+    assert "workspace-a" in audit
+
+
 def test_workspace_purge_deletes_documents_vectors_chats_and_logs(tmp_path, monkeypatch):
     source = tmp_path / "data" / "uploads" / "policy.md"
     source.parent.mkdir(parents=True)
@@ -745,7 +822,8 @@ def test_workspace_purge_deletes_documents_vectors_chats_and_logs(tmp_path, monk
     assert body["conversations_deleted"] == 1
     assert body["logs_deleted"] == 1
     assert not source.exists()
-    assert not logs.exists()
+    assert not (logs / "feedback.jsonl").exists()
+    assert "admin_workspace_purge" in (logs / "audit.jsonl").read_text(encoding="utf-8")
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["documents"] == {}
 
 
