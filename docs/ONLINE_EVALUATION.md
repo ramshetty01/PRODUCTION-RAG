@@ -27,6 +27,17 @@ cases are marked `verified=false` and require human review before they become
 quality-gate inputs. Promotion preserves request ids, citations, and failure
 reasons so operators can trace the production behavior.
 
+Export draft candidates from the feedback log:
+
+```bash
+python scripts/promote_feedback.py \
+  --feedback logs/feedback.jsonl \
+  --output evals/drafts/feedback-candidates.jsonl
+```
+
+Review the draft JSONL manually, verify evidence, redact sensitive content, and
+only then copy approved rows into `evals/golden.jsonl` with `verified=true`.
+
 ## Privacy
 
 Online examples may contain user data. Before promotion, obvious emails and
