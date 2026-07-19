@@ -332,6 +332,55 @@ p {
   font-size: 4rem;
 }
 
+.onboarding-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr);
+  gap: 22px;
+  align-items: end;
+  border: var(--ds-border);
+  border-radius: var(--ds-radius-md);
+  background: rgba(8, 18, 15, 0.72);
+  padding: 22px;
+}
+
+.onboarding-panel[hidden] {
+  display: none;
+}
+
+.onboarding-panel h2 {
+  margin: 8px 0 10px;
+  color: #fff;
+  font: normal normal 300 1.7rem/1.05 var(--font-heading);
+}
+
+.onboarding-panel p:last-child {
+  margin: 0;
+  color: var(--soft);
+}
+
+.onboarding-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-steps li {
+  border: var(--ds-border);
+  border-radius: var(--ds-radius-sm);
+  color: rgba(255, 255, 255, 0.78);
+  padding: 10px 12px;
+}
+
+.onboarding-panel[data-step="upload"] [data-step="upload"],
+.onboarding-panel[data-step="ready"] [data-step="ready"],
+.onboarding-panel[data-step="question"] [data-step="question"] {
+  border-color: rgba(248, 239, 220, 0.55);
+  background: rgba(248, 239, 220, 0.1);
+  color: #fff;
+}
+
 .chat-messages {
   display: grid;
   align-content: start;
@@ -1086,6 +1135,7 @@ h3 {
   }
 
   .scenario-row,
+  .onboarding-panel,
   .query-actions,
   .chat-composer,
   .auth-strip,

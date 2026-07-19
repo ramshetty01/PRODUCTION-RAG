@@ -59,6 +59,19 @@
               <button type="button" data-scenario="incident">How fast must auth incidents be reviewed?</button>
             </div>
 
+            <section id="onboardingPanel" class="onboarding-panel" aria-label="workspace onboarding">
+              <div>
+                <p class="eyebrow">First run</p>
+                <h2>Start your workspace</h2>
+                <p id="onboardingStatus">Upload a document to create your private workspace index.</p>
+              </div>
+              <ol class="onboarding-steps">
+                <li data-step="upload">Upload a document</li>
+                <li data-step="ready">Wait for Ready</li>
+                <li data-step="question">Ask your first question</li>
+              </ol>
+            </section>
+
             <div id="chatMessages" class="chat-messages" aria-live="polite">
               <div class="ui-empty-state">Upload documents to start asking questions.</div>
             </div>
