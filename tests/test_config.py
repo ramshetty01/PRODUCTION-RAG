@@ -8,6 +8,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_CONVERSATION_MAX_TURNS",
         "RAG_RETENTION_DAYS",
         "RAG_RETENTION_PURGE_LOGS",
+        "RAG_RETENTION_SCHEDULE_SECONDS",
         "RAG_UPLOAD_MAX_BYTES",
         "RAG_UPLOAD_SCAN_COMMAND",
         "RAG_VECTOR_BACKEND",
@@ -46,6 +47,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.conversation_max_turns == 6
     assert settings.retention_days == 30
     assert settings.retention_purge_logs is True
+    assert settings.retention_schedule_seconds == 86400
     assert settings.upload_max_bytes == 10 * 1024 * 1024
     assert settings.upload_scan_command == ""
     assert settings.vector_backend == "chroma"
@@ -101,6 +103,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_CONVERSATION_MAX_TURNS=4",
                 "RAG_RETENTION_DAYS=7",
                 "RAG_RETENTION_PURGE_LOGS=false",
+                "RAG_RETENTION_SCHEDULE_SECONDS=3600",
                 "RAG_UPLOAD_MAX_BYTES=1024",
                 "RAG_UPLOAD_SCAN_COMMAND=/bin/true",
                 "RAG_LLM_PROVIDER=openai",
@@ -144,6 +147,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.conversation_max_turns == 4
     assert settings.retention_days == 7
     assert settings.retention_purge_logs is False
+    assert settings.retention_schedule_seconds == 3600
     assert settings.upload_max_bytes == 1024
     assert settings.upload_scan_command == "/bin/true"
     assert settings.llm_provider == "openai"

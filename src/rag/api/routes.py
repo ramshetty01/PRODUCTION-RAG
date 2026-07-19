@@ -5,6 +5,7 @@ import re
 import shutil
 import threading
 import time
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -222,6 +223,13 @@ class PurgeWorkspaceResponse(BaseModel):
     logs_deleted: int
 
 
+class RetentionRunResponse(BaseModel):
+    status: str
+    documents_deleted: int
+    files_deleted: int
+    vector_records_deleted: int | None
+
+
 class AdminStatusResponse(BaseModel):
     health: dict
     index: dict
@@ -255,6 +263,7 @@ CONVERSATION_MEMORY = ConversationMemoryStore(max_turns=SETTINGS.conversation_ma
 INGESTION_JOBS: dict[str, dict] = {}
 INGESTION_JOB_LOCK = threading.Lock()
 MODEL_ERROR_COUNT = 0
+RETENTION_THREAD_STARTED = False
 
 
 def _auth_context(
@@ -663,6 +672,84 @@ def _run_ingestion_job(job_id: str, saved_path: Path, safe_name: str, workspace_
         detail = _classify_ingestion_error(exc)
         MANAGED_OBSERVABILITY.export_log({"event": "ingestion_failed", "job_id": job_id, "error": detail["code"]})
         _set_ingestion_job(job_id, status="failed", progress=100, error=detail["message"])
+
+
+def _retention_days_for_record(record: dict) -> int:
+    for key in ("workspace_retention_days", "org_retention_days", "retention_days"):
+        value = record.get(key)
+        if value not in (None, ""):
+            return int(value)
+    return SETTINGS.retention_days
+
+
+def _record_ingested_at(record: dict) -> datetime | None:
+    value = record.get("ingested_at")
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00")) if value else None
+
+
+def _run_scheduled_retention(persist_dir: str | None = None, now: datetime | None = None) -> RetentionRunResponse:
+    now = now or datetime.now(UTC)
+    manifest_path = _document_manifest_path()
+    manifest = load_manifest(manifest_path)
+    expired = []
+    for record in manifest.get("documents", {}).values():
+        ingested_at = _record_ingested_at(record)
+        if ingested_at and ingested_at <= now - timedelta(days=_retention_days_for_record(record)):
+            expired.append(record)
+
+    if not expired:
+        return RetentionRunResponse(status="ok", documents_deleted=0, files_deleted=0, vector_records_deleted=0)
+
+    vectorstore = load_vectorstore(_safe_api_path(persist_dir or SETTINGS.vector_db_path), settings=SETTINGS)
+    files_deleted = 0
+    vector_records_deleted = 0
+    for record in expired:
+        document_id = record["document_id"]
+        delete_filter = {"document_id": document_id}
+        if record.get("workspace_id"):
+            delete_filter["workspace_id"] = record["workspace_id"]
+        vector_records_deleted += delete_records_by_metadata(vectorstore, delete_filter) or 0
+        source_path = _safe_api_path(record["source_path"])
+        if source_path.exists():
+            source_path.unlink()
+            files_deleted += 1
+        manifest["documents"].pop(document_id, None)
+        append_audit_event(
+            {
+                "timestamp": now.isoformat(),
+                "event": "scheduled_retention_delete",
+                "document_id": document_id,
+                "workspace_id": record.get("workspace_id", "default"),
+                "retention_days": _retention_days_for_record(record),
+            },
+            _safe_api_path(DEFAULT_AUDIT_LOG),
+        )
+
+    save_manifest(manifest, manifest_path)
+    _clear_query_cache()
+    return RetentionRunResponse(
+        status="ok",
+        documents_deleted=len(expired),
+        files_deleted=files_deleted,
+        vector_records_deleted=vector_records_deleted,
+    )
+
+
+def _retention_scheduler_loop() -> None:
+    while True:
+        time.sleep(max(1, SETTINGS.retention_schedule_seconds))
+        try:
+            _run_scheduled_retention()
+        except Exception:
+            LOGGER.exception("Scheduled retention failed")
+
+
+def _start_retention_scheduler() -> None:
+    global RETENTION_THREAD_STARTED
+    if RETENTION_THREAD_STARTED or SETTINGS.retention_schedule_seconds <= 0:
+        return
+    RETENTION_THREAD_STARTED = True
+    threading.Thread(target=_retention_scheduler_loop, daemon=True, name="rag-retention").start()
 
 
 def _purge_logs() -> int:
@@ -1156,6 +1243,14 @@ def purge_workspace(
     )
 
 
+@router.post("/retention/run", response_model=RetentionRunResponse)
+def run_retention(
+    persist_dir: str | None = None,
+    auth_context: AuthContext = Depends(_admin_context),
+):
+    return _run_scheduled_retention(persist_dir)
+
+
 @router.post("/documents/{document_id}/reindex", response_model=UploadIngestResponse)
 def reindex_document(
     document_id: str,
@@ -1306,7 +1401,12 @@ def metrics():
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Production RAG API")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        _start_retention_scheduler()
+        yield
+
+    app = FastAPI(title="Production RAG API", lifespan=lifespan)
 
     @app.middleware("http")
     async def record_request_metrics(request: Request, call_next):
