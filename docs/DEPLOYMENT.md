@@ -256,6 +256,11 @@ Environment variables are documented in `.env.example`:
   `RAG_UPLOAD_SCAN_COMMAND`: upload safety controls. Files are written to
   `data/quarantine`, MIME/extension checked, scanned when a command is
   configured, then moved to `data/uploads` before indexing.
+- `RAG_OBJECT_STORAGE_BACKEND`: `local` by default, or `s3` for S3-compatible
+  managed object storage.
+- `RAG_OBJECT_STORAGE_BUCKET`, `RAG_OBJECT_STORAGE_PREFIX`,
+  `RAG_OBJECT_STORAGE_ENDPOINT`, and `RAG_OBJECT_STORAGE_REGION`: object
+  storage settings used when uploads should be mirrored to a managed bucket.
 - `RAG_OTEL_ENABLED`, `RAG_OTEL_SERVICE_NAME`, and
   `RAG_OTEL_EXPORTER_OTLP_ENDPOINT`: optional OpenTelemetry tracing controls.
 - Query cache entries are scoped by authenticated subject, tenant, and derived
