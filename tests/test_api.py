@@ -515,6 +515,22 @@ def test_upload_endpoint_returns_managed_storage_uri(tmp_path, monkeypatch):
     assert manifest["documents"]["policy"]["storage_uri"] == "s3://rag-documents/workspace-a/policy.md"
 
 
+def test_upload_endpoint_rejects_cross_tenant_workspace(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("tenant-a-key:public:tenant-a"))
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        headers={"X-API-Key": "tenant-a-key"},
+        data={"workspace_id": "tenant-b"},
+        files={"file": ("policy.md", b"# Policy", "text/markdown")},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "workspace not found"
+
+
 def test_upload_endpoint_can_queue_background_ingestion(tmp_path, monkeypatch):
     routes.INGESTION_JOBS.clear()
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
@@ -600,6 +616,56 @@ def test_ingestion_job_records_terminal_failure(tmp_path, monkeypatch):
     assert job["attempts"] == 2
     assert job["terminal"] is True
     assert job["error"] == "We could not read this file."
+
+
+def test_tenant_users_only_see_their_documents_and_jobs(tmp_path, monkeypatch):
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "tenant-a-doc": {
+                        "document_id": "tenant-a-doc",
+                        "document_version": "v1",
+                        "filename": "a.md",
+                        "workspace_id": "tenant-a",
+                        "status": "indexed",
+                        "chunk_count": 1,
+                        "source_path": str(tmp_path / "a.md"),
+                    },
+                    "tenant-b-doc": {
+                        "document_id": "tenant-b-doc",
+                        "document_version": "v1",
+                        "filename": "b.md",
+                        "workspace_id": "tenant-b",
+                        "status": "indexed",
+                        "chunk_count": 1,
+                        "source_path": str(tmp_path / "b.md"),
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    routes.INGESTION_JOBS.clear()
+    routes.INGESTION_JOBS["job-a"] = {"job_id": "job-a", "workspace_id": "tenant-a", "status": "queued", "progress": 0}
+    routes.INGESTION_JOBS["job-b"] = {"job_id": "job-b", "workspace_id": "tenant-b", "status": "queued", "progress": 0}
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest_path)))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("tenant-a-key:public:tenant-a,tenant-b-key:public:tenant-b"))
+    client = TestClient(routes.create_app())
+
+    documents = client.get("/documents", headers={"X-API-Key": "tenant-a-key"})
+    blocked_documents = client.get("/documents", headers={"X-API-Key": "tenant-a-key"}, params={"workspace_id": "tenant-b"})
+    own_job = client.get("/ingestion-jobs/job-a", headers={"X-API-Key": "tenant-a-key"})
+    blocked_job = client.get("/ingestion-jobs/job-b", headers={"X-API-Key": "tenant-a-key"})
+
+    assert [document["document_id"] for document in documents.json()["documents"]] == ["tenant-a-doc"]
+    assert blocked_documents.status_code == 404
+    assert own_job.status_code == 200
+    assert blocked_job.status_code == 404
+    routes.INGESTION_JOBS.clear()
 
 
 def test_index_status_reports_empty_ready_indexing_and_failed(tmp_path, monkeypatch):
@@ -1668,6 +1734,56 @@ def test_query_endpoint_derives_admin_role_from_jwt(monkeypatch):
     assert body["retrieval"]["auth_subject"] == "jwt:user-1"
     assert body["retrieval"]["auth_roles"] == ["admin", "public"]
     assert body["retrieval"]["tenant_id"] == "tenant-a"
+
+
+def test_query_endpoint_scopes_public_tenant_to_own_workspace(monkeypatch):
+    class TenantVectorStore:
+        def similarity_search(self, query, k):
+            return [
+                Document(
+                    page_content="Tenant A policy.",
+                    metadata={
+                        "source": "/tmp/a.md",
+                        "page": 0,
+                        "chunk_index": 0,
+                        "chunk_id": "a:p0:c0",
+                        "document_id": "a",
+                        "document_version": "v1",
+                        "workspace_id": "tenant-a",
+                        "access_roles": ["public"],
+                    },
+                ),
+                Document(
+                    page_content="Tenant B policy.",
+                    metadata={
+                        "source": "/tmp/b.md",
+                        "page": 0,
+                        "chunk_index": 0,
+                        "chunk_id": "b:p0:c0",
+                        "document_id": "b",
+                        "document_version": "v1",
+                        "workspace_id": "tenant-b",
+                        "access_roles": ["public"],
+                    },
+                ),
+            ][:k]
+
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("tenant-a-key:public:tenant-a"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: TenantVectorStore())
+    client = TestClient(routes.create_app())
+
+    response = client.post("/query", headers={"X-API-Key": "tenant-a-key"}, json={"query": "policy", "top_k": 2})
+    blocked = client.post(
+        "/query",
+        headers={"X-API-Key": "tenant-a-key"},
+        json={"query": "policy", "workspace_id": "tenant-b"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["retrieval"]["chunk_ids"] == ["a:p0:c0"]
+    assert response.json()["retrieval"]["tenant_id"] == "tenant-a"
+    assert blocked.status_code == 404
 
 
 def test_query_endpoint_rejects_missing_and_invalid_api_key_when_configured(monkeypatch):
