@@ -654,6 +654,48 @@ def test_upload_endpoint_rejects_failed_scanner(tmp_path, monkeypatch):
     assert response.json()["detail"]["actions"] == ["reupload", "contact_admin"]
 
 
+def test_upload_endpoint_enforces_workspace_document_quota(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "existing.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Existing", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "existing": {
+                        "document_id": "existing",
+                        "document_version": "v1",
+                        "chunk_count": 1,
+                        "source_path": str(source),
+                        "status": "indexed",
+                        "workspace_id": "workspace-a",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(manifest_path=str(manifest_path), quota_max_documents_per_workspace=1),
+    )
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        data={"workspace_id": "workspace-a"},
+        files={"file": ("new.md", b"# New", "text/markdown")},
+    )
+
+    assert response.status_code == 402
+    assert response.json()["detail"]["code"] == "quota_exceeded"
+    assert response.json()["detail"]["message"] == "This workspace has reached its document limit."
+
+
 def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, monkeypatch):
     source = tmp_path / "data" / "uploads" / "policy.md"
     source.parent.mkdir(parents=True)
@@ -1516,6 +1558,28 @@ def test_query_endpoint_rejects_missing_and_invalid_api_key_when_configured(monk
     assert missing.json() == {"detail": "missing API key"}
     assert invalid.status_code == 401
     assert invalid.json() == {"detail": "invalid API key"}
+
+
+def test_query_endpoint_enforces_user_request_and_token_quotas(tmp_path, monkeypatch):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "audit.jsonl").write_text(
+        json.dumps({"user": "dev-public", "query": "q", "prompt_tokens": 10, "answer_tokens": 5}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(quota_max_requests_per_user=1))
+    client = TestClient(routes.create_app())
+
+    request_limited = client.post("/query", json={"query": "runner"})
+
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(quota_max_tokens_per_user=15))
+    token_limited = client.post("/query", json={"query": "runner"})
+
+    assert request_limited.status_code == 402
+    assert request_limited.json()["detail"]["message"] == "You have reached the request limit for this plan."
+    assert token_limited.status_code == 402
+    assert token_limited.json()["detail"]["message"] == "You have reached the token limit for this plan."
 
 
 def test_query_endpoint_supports_exact_retrieval_mode(monkeypatch):

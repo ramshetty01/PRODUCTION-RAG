@@ -242,6 +242,11 @@ Environment variables are documented in `.env.example`:
 - `RAG_AUTH_MODE`: `dev`, `api_key`, or `jwt`.
 - `RAG_JWT_SECRET`, `RAG_JWT_ISSUER`, `RAG_JWT_AUDIENCE`: JWT validation
   settings for signed bearer-token deployments.
+- `RAG_QUOTA_MAX_DOCUMENTS_PER_WORKSPACE`,
+  `RAG_QUOTA_MAX_STORAGE_BYTES_PER_WORKSPACE`,
+  `RAG_QUOTA_MAX_REQUESTS_PER_USER`, `RAG_QUOTA_MAX_TOKENS_PER_USER`, and
+  `RAG_QUOTA_MAX_CONCURRENT_JOBS_PER_WORKSPACE`: optional billing and usage
+  limits. Leave as `0` to disable a limit.
 - `RAG_OTEL_ENABLED`, `RAG_OTEL_SERVICE_NAME`, and
   `RAG_OTEL_EXPORTER_OTLP_ENDPOINT`: optional OpenTelemetry tracing controls.
 - Query cache entries are scoped by authenticated subject, tenant, and derived
