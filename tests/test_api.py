@@ -216,6 +216,10 @@ def test_demo_frontend_assets_are_served():
     assert "appState.chat.lastPayload" in script.text
     assert "appState.indexing.ready" in script.text
     assert "Sign in with a valid API key or bearer token." in script.text
+    assert "recovery-actions" in styles.text
+    assert "recoveryError" in script.text
+    assert "Upload again" in script.text
+    assert "Contact admin" in script.text
     assert "citation-toggle" in script.text
     assert "citation-detail" in script.text
     assert "Open source" in script.text
@@ -576,9 +580,12 @@ def test_upload_endpoint_rejects_unsupported_and_empty_files(tmp_path, monkeypat
     )
 
     assert unsupported.status_code == 400
-    assert unsupported.json()["detail"] == "supported upload types: PDF, DOCX, PPTX, Markdown, HTML, CSV, or text"
+    assert unsupported.json()["detail"]["code"] == "unsupported_upload_type"
+    assert unsupported.json()["detail"]["message"] == "Upload a PDF, DOCX, PPTX, Markdown, HTML, CSV, or text file."
+    assert unsupported.json()["detail"]["actions"] == ["reupload"]
     assert empty.status_code == 400
-    assert empty.json()["detail"] == "uploaded file is empty"
+    assert empty.json()["detail"]["code"] == "empty_upload"
+    assert empty.json()["detail"]["actions"] == ["reupload"]
 
 
 def test_upload_endpoint_sanitizes_names_limits_size_and_runs_scanner(tmp_path, monkeypatch):
@@ -626,7 +633,8 @@ def test_upload_endpoint_rejects_failed_scanner(tmp_path, monkeypatch):
     )
 
     assert response.status_code == 400
-    assert "upload rejected by scanner" in response.json()["detail"]
+    assert response.json()["detail"]["code"] == "upload_scan_failed"
+    assert response.json()["detail"]["actions"] == ["reupload", "contact_admin"]
 
 
 def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, monkeypatch):
@@ -1476,6 +1484,7 @@ def test_query_endpoint_returns_clean_json_errors(monkeypatch):
     assert body["detail"]["code"] == "vector_store_unavailable"
     assert body["detail"]["message"] == "The document index is not available right now."
     assert body["detail"]["retry"] == "Reindex the corpus, then retry the question."
+    assert body["detail"]["actions"] == ["reindex", "retry", "contact_admin"]
     assert "vector store missing" not in body["detail"]["message"]
     assert body["detail"]["request_id"]
     assert body["detail"]["trace"]["error"] == "RuntimeError"
@@ -1497,8 +1506,29 @@ def test_query_endpoint_returns_product_error_for_llm_failure(monkeypatch):
     body = response.json()
     assert body["detail"]["code"] == "answer_generation_unavailable"
     assert body["detail"]["message"] == "The answer model did not respond."
+    assert body["detail"]["actions"] == ["retry", "contact_admin"]
     assert "secret payload" not in body["detail"]["message"]
     assert body["detail"]["trace"]["error"] == "RuntimeError"
+
+
+def test_query_endpoint_returns_recovery_actions_for_retrieval_failure(monkeypatch):
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+
+    def raise_error(*_args, **_kwargs):
+        raise RuntimeError("retrieval backend timeout with internal host")
+
+    monkeypatch.setattr(routes, "retrieve_by_mode", raise_error)
+    client = TestClient(routes.create_app())
+
+    response = client.post("/query", json={"query": "What does a runner do?"})
+
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"]["code"] == "retrieval_unavailable"
+    assert body["detail"]["message"] == "We could not search the indexed corpus right now."
+    assert body["detail"]["actions"] == ["retry", "reindex"]
+    assert "internal host" not in body["detail"]["message"]
 
 
 def test_upload_endpoint_returns_product_error_for_index_failure(tmp_path, monkeypatch):
@@ -1530,6 +1560,7 @@ def test_upload_endpoint_returns_product_error_for_index_failure(tmp_path, monke
     body = response.json()
     assert body["detail"]["code"] == "index_write_failed"
     assert body["detail"]["message"] == "We could not write this document to the search index."
+    assert body["detail"]["actions"] == ["reindex", "contact_admin"]
     assert "private/path" not in body["detail"]["message"]
 
 

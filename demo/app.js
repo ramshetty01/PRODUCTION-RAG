@@ -126,10 +126,14 @@ function authHeaders(base = {}) {
   return headers;
 }
 
-function authErrorMessage(status, payload) {
-  if (status === 401) return "Sign in with a valid API key or bearer token.";
-  if (status === 403) return "Your current identity is not allowed to perform this action.";
-  return typeof payload.detail === "string" ? payload.detail : payload.detail?.message;
+function recoveryError(status, payload) {
+  if (status === 401) return {message: "Sign in with a valid API key or bearer token.", actions: ["contact_admin"]};
+  if (status === 403) return {message: "Your current identity is not allowed to perform this action.", actions: ["contact_admin"]};
+  if (typeof payload.detail === "string") return {message: payload.detail, actions: ["retry"]};
+  return {
+    message: payload.detail?.message || `HTTP ${status}`,
+    actions: payload.detail?.actions || ["retry"],
+  };
 }
 
 function indexingLabel(status) {
@@ -169,6 +173,7 @@ function renderChatMessage(role, content, citationItems = []) {
   message.append(bubble);
   chatMessages.append(message);
   chatMessages.scrollTop = chatMessages.scrollHeight;
+  return bubble;
 }
 
 function renderCitations(items) {
@@ -232,10 +237,37 @@ function renderResult(payload) {
   feedbackStatus.textContent = "Ready";
 }
 
+function recoveryLabel(action) {
+  return {
+    retry: "Retry",
+    reupload: "Upload again",
+    reindex: "Reindex",
+    contact_admin: "Contact admin",
+  }[action] || "Retry";
+}
+
+function runRecoveryAction(action) {
+  if (action === "retry") form.requestSubmit();
+  if (action === "reupload") uploadInput.click();
+  if (action === "reindex") uploadForm.requestSubmit();
+  if (action === "contact_admin") setStatus("Contact admin with this request ID", "error");
+}
+
 function renderError(error) {
-  mergeState({chat: {lastPayload: null, error}, errors: [...appState.errors, error]});
-  answerText.textContent = error;
-  renderChatMessage("assistant", error);
+  const recovery = typeof error === "string" ? {message: error, actions: ["retry"]} : error;
+  mergeState({chat: {lastPayload: null, error: recovery.message}, errors: [...appState.errors, recovery.message]});
+  answerText.textContent = recovery.message;
+  const bubble = renderChatMessage("assistant", recovery.message);
+  const actions = document.createElement("div");
+  actions.className = "recovery-actions";
+  for (const action of recovery.actions || ["retry"]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = recoveryLabel(action);
+    button.addEventListener("click", () => runRecoveryAction(action));
+    actions.append(button);
+  }
+  bubble.append(actions);
   requestId.textContent = "Request failed";
   requestId.className = "pill error";
   renderCitations([]);
@@ -336,7 +368,7 @@ async function readStreamingAnswer(response) {
         finalPayload = data;
       }
       if (event.type === "error") {
-        throw new Error(data.message || `HTTP ${data.status_code || 500}`);
+        throw recoveryError(data.status_code || 500, {detail: data});
       }
     }
   }
@@ -355,8 +387,7 @@ async function postStandardQuery(headers, body) {
   });
   const payload = await response.json();
   if (!response.ok) {
-    const message = authErrorMessage(response.status, payload);
-    throw new Error(message || `HTTP ${response.status}`);
+    throw recoveryError(response.status, payload);
   }
   renderResult(payload);
 }
@@ -376,7 +407,7 @@ async function refreshEvaluation() {
     const response = await fetch("/evaluation");
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.detail || `HTTP ${response.status}`);
+      throw recoveryError(response.status, payload);
     }
     evalStatus.textContent = payload.quality_gate?.passed ? "Passing" : "Failing";
     evalStatus.className = `pill ${payload.quality_gate?.passed ? "" : "error"}`.trim();
@@ -461,7 +492,7 @@ async function askQuestion(event) {
 
     setStatus("Online");
   } catch (error) {
-    renderError(error.message);
+    renderError(error.message ? error : {message: "We could not answer this question right now.", actions: ["retry"]});
     setStatus("Error", "error");
   } finally {
     setChatBusy(false);
@@ -507,7 +538,7 @@ async function uploadDocument(event) {
     });
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(authErrorMessage(response.status, payload) || `HTTP ${response.status}`);
+      throw recoveryError(response.status, payload);
     }
     const finalPayload = payload.job_id ? await pollIngestionJob(payload.job_id) : payload;
     uploadStatus.textContent = `${indexingLabel(finalPayload.status)} - ${finalPayload.chunks_created} chunks`;
@@ -517,8 +548,10 @@ async function uploadDocument(event) {
     metricStatus.textContent = "Indexed";
     setStatus("Online");
   } catch (error) {
-    uploadStatus.textContent = error.message;
-    mergeState({upload: {status: "failed", message: error.message}, errors: [...appState.errors, error.message]});
+    const recovery = error.message ? error : {message: "We could not index this document.", actions: ["reupload"]};
+    uploadStatus.textContent = recovery.message;
+    renderError(recovery);
+    mergeState({upload: {status: "failed", message: recovery.message}, errors: [...appState.errors, recovery.message]});
     metricStatus.textContent = "Upload error";
     setStatus("Error", "error");
   } finally {
@@ -534,7 +567,7 @@ async function pollIngestionJob(jobId) {
     const response = await fetch(`/ingestion-jobs/${jobId}`, {headers: authHeaders()});
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.detail || `HTTP ${response.status}`);
+      throw recoveryError(response.status, payload);
     }
     uploadStatus.textContent = `${indexingLabel(payload.status)} - ${payload.progress}%`;
     renderIndexReadiness({
@@ -545,8 +578,8 @@ async function pollIngestionJob(jobId) {
     if (payload.status === "indexed") {
       return payload;
     }
-    if (payload.status === "failed") {
-      throw new Error(payload.error || "Indexing failed");
+  if (payload.status === "failed") {
+      throw {message: payload.error || "Indexing failed. Upload the corpus again.", actions: ["reupload", "contact_admin"]};
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -573,7 +606,7 @@ async function sendFeedback(helpful) {
   });
   const payload = await response.json();
   if (!response.ok) {
-    throw new Error(authErrorMessage(response.status, payload) || `HTTP ${response.status}`);
+    throw recoveryError(response.status, payload);
   }
   feedbackStatus.textContent = helpful ? "Marked helpful" : "Marked unhelpful";
 }
