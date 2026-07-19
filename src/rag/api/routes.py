@@ -997,6 +997,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                 "citations": citation_ids(response["citations"]),
                 "model": SETTINGS.llm_model or SETTINGS.llm_provider,
                 "latency_ms": event.latency_ms,
+                "estimated_cost": event.token_usage.get("estimated_cost", 0.0),
             },
             _safe_api_path(DEFAULT_AUDIT_LOG),
         )
@@ -1600,10 +1601,48 @@ def evaluation_report():
     return EvaluationResponse(**build_evaluation_report())
 
 
+def _directory_size_bytes(path: Path) -> int:
+    if not path.exists():
+        return 0
+    if path.is_file():
+        return path.stat().st_size
+    return sum(child.stat().st_size for child in path.rglob("*") if child.is_file())
+
+
+def _alert_metric_lines() -> list[str]:
+    documents = _document_records()
+    failed_documents = [document for document in documents if document.get("status") not in {"indexed", "skipped"}]
+    failed_jobs = [job for job in _ingestion_jobs_for_workspace(None) if job.get("status") == "failed"]
+    audit_events = load_audit_events(_safe_api_path(DEFAULT_AUDIT_LOG), limit=5000)
+    storage_bytes = _directory_size_bytes(_safe_api_path(PROJECT_ROOT / "data" / "uploads"))
+    storage_bytes += _directory_size_bytes(_safe_api_path(SETTINGS.vector_db_path))
+    estimated_cost = sum(float(event.get("estimated_cost") or 0.0) for event in audit_events)
+    auth_failures = METRICS.status_counts.get(401, 0) + METRICS.status_counts.get(403, 0)
+    avg_latency = round(METRICS.latency_ms_total / METRICS.request_count, 3) if METRICS.request_count else 0.0
+    return [
+        "# HELP rag_ingestion_failures_total Failed ingestion jobs and failed document records.",
+        "# TYPE rag_ingestion_failures_total gauge",
+        f"rag_ingestion_failures_total {len(failed_jobs) + len(failed_documents)}",
+        "# HELP rag_auth_failures_total API authentication and authorization failures.",
+        "# TYPE rag_auth_failures_total gauge",
+        f"rag_auth_failures_total {auth_failures}",
+        "# HELP rag_api_request_latency_ms_avg Average API request latency in milliseconds.",
+        "# TYPE rag_api_request_latency_ms_avg gauge",
+        f"rag_api_request_latency_ms_avg {avg_latency}",
+        "# HELP rag_llm_estimated_cost_total Estimated LLM cost recorded in query audit events.",
+        "# TYPE rag_llm_estimated_cost_total counter",
+        f"rag_llm_estimated_cost_total {round(estimated_cost, 6)}",
+        "# HELP rag_storage_usage_bytes Local upload and vector index storage usage.",
+        "# TYPE rag_storage_usage_bytes gauge",
+        f"rag_storage_usage_bytes {storage_bytes}",
+    ]
+
+
 @router.get("/metrics")
 def metrics():
     METRICS.record_provider_failures(LLM_PROVIDER_FAILURES)
-    return Response(METRICS.to_prometheus(), media_type="text/plain; version=0.0.4")
+    payload = METRICS.to_prometheus() + "\n".join(_alert_metric_lines()) + "\n"
+    return Response(payload, media_type="text/plain; version=0.0.4")
 
 
 def create_app() -> FastAPI:

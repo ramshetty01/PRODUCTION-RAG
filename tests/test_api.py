@@ -1645,6 +1645,11 @@ def test_metrics_endpoint_exports_prometheus_text():
     assert response.headers["content-type"].startswith("text/plain")
     assert "rag_api_requests_total" in response.text
     assert 'rag_api_request_status_total{status_code="200"}' in response.text
+    assert "rag_ingestion_failures_total" in response.text
+    assert "rag_auth_failures_total" in response.text
+    assert "rag_api_request_latency_ms_avg" in response.text
+    assert "rag_llm_estimated_cost_total" in response.text
+    assert "rag_storage_usage_bytes" in response.text
 
 
 def test_query_endpoint_rejects_persist_dir_path_traversal():

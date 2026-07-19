@@ -200,6 +200,9 @@ RAG_OBSERVABILITY_EXPORT_API_KEY=...
 
 Alert routing should cover ingestion failures, model errors, high request
 latency, elevated 4xx/5xx rates, and vector index health.
+Use [Production Alerting](ALERTING.md) for Prometheus/Grafana-ready rules for
+ingestion failures, LLM errors, high latency, cost spikes, storage usage, and
+auth failures.
 
 Install the optional OpenTelemetry packages in the runtime image when tracing is
 enabled:
