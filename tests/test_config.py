@@ -21,6 +21,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_CHUNK_SIZE",
         "RAG_CHUNK_OVERLAP",
         "RAG_LLM_PROVIDER",
+        "RAG_LLM_FALLBACK_PROVIDERS",
         "RAG_LLM_ENDPOINT",
         "RAG_LLM_TIMEOUT_SECONDS",
         "RAG_LLM_MAX_TOKENS",
@@ -61,6 +62,7 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.chunk_size == 700
     assert settings.chunk_overlap == 100
     assert settings.llm_provider == "extractive"
+    assert settings.llm_fallback_providers == ""
     assert settings.llm_endpoint == ""
     assert settings.llm_timeout_seconds == 60
     assert settings.llm_max_tokens == 700
@@ -112,6 +114,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_UPLOAD_MAX_BYTES=1024",
                 "RAG_UPLOAD_SCAN_COMMAND=/bin/true",
                 "RAG_LLM_PROVIDER=openai",
+                "RAG_LLM_FALLBACK_PROVIDERS=local-openai,extractive",
                 "RAG_LLM_ENDPOINT=http://localhost:11434/v1/chat/completions",
                 "RAG_LLM_TIMEOUT_SECONDS=5",
                 "RAG_LLM_MAX_TOKENS=256",
@@ -157,6 +160,7 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.upload_max_bytes == 1024
     assert settings.upload_scan_command == "/bin/true"
     assert settings.llm_provider == "openai"
+    assert settings.llm_fallback_providers == "local-openai,extractive"
     assert settings.llm_endpoint == "http://localhost:11434/v1/chat/completions"
     assert settings.llm_timeout_seconds == 5
     assert settings.llm_max_tokens == 256

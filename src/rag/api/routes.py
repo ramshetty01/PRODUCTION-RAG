@@ -31,7 +31,7 @@ from src.rag.evaluation_report import build_evaluation_report
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
 from src.rag.monitoring import DEFAULT_FEEDBACK_LOG, FeedbackEvent, append_feedback, load_feedback, monitoring_metrics
-from src.rag.models import get_model_provider
+from src.rag.models import LLM_PROVIDER_FAILURES, get_model_provider
 from src.rag.observability import (
     LOGGER,
     MetricsRegistry,
@@ -1488,6 +1488,7 @@ def evaluation_report():
 
 @router.get("/metrics")
 def metrics():
+    METRICS.record_provider_failures(LLM_PROVIDER_FAILURES)
     return Response(METRICS.to_prometheus(), media_type="text/plain; version=0.0.4")
 
 
