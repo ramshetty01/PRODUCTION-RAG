@@ -376,6 +376,17 @@ def _product_error_detail(
     return detail
 
 
+def _quota_error(message: str) -> HTTPException:
+    return HTTPException(
+        status_code=402,
+        detail=_product_error_detail(
+            "quota_exceeded",
+            message,
+            retry="Upgrade the workspace limit or contact an admin.",
+        ),
+    )
+
+
 def _classify_query_error(exc: Exception, request_id: str, event: TraceEvent) -> dict:
     global MODEL_ERROR_COUNT
     text = str(exc).lower()
@@ -662,6 +673,40 @@ def _document_response_record(record: dict) -> dict:
     return row
 
 
+def _workspace_storage_bytes(workspace_id: str | None) -> int:
+    total = 0
+    for record in _document_records(workspace_id):
+        path = Path(record.get("source_path") or "")
+        if path.exists():
+            total += path.stat().st_size
+    return total
+
+
+def _user_audit_events(subject: str) -> list[dict]:
+    return [event for event in load_audit_events(_safe_api_path(DEFAULT_AUDIT_LOG), limit=5000) if event.get("user") == subject]
+
+
+def _enforce_query_quota(auth_context: AuthContext) -> None:
+    events = _user_audit_events(auth_context.subject)
+    if SETTINGS.quota_max_requests_per_user and len(events) >= SETTINGS.quota_max_requests_per_user:
+        raise _quota_error("You have reached the request limit for this plan.")
+    used_tokens = sum(int(event.get("prompt_tokens") or 0) + int(event.get("answer_tokens") or 0) for event in events)
+    if SETTINGS.quota_max_tokens_per_user and used_tokens >= SETTINGS.quota_max_tokens_per_user:
+        raise _quota_error("You have reached the token limit for this plan.")
+
+
+def _enforce_upload_quota(workspace_id: str | None, upload_bytes: int) -> None:
+    documents = _document_records(workspace_id)
+    if SETTINGS.quota_max_documents_per_workspace and len(documents) >= SETTINGS.quota_max_documents_per_workspace:
+        raise _quota_error("This workspace has reached its document limit.")
+    storage_limit = SETTINGS.quota_max_storage_bytes_per_workspace
+    if storage_limit and _workspace_storage_bytes(workspace_id) + upload_bytes > storage_limit:
+        raise _quota_error("This workspace has reached its storage limit.")
+    active_jobs = [job for job in _ingestion_jobs_for_workspace(workspace_id) if job.get("status") in {"queued", "parsing", "chunking", "embedding"}]
+    if SETTINGS.quota_max_concurrent_jobs_per_workspace and len(active_jobs) >= SETTINGS.quota_max_concurrent_jobs_per_workspace:
+        raise _quota_error("This workspace has too many indexing jobs running.")
+
+
 def _index_uploaded_file(
     saved_path: Path,
     safe_name: str,
@@ -868,6 +913,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
         safe_query = validate_query(request.query)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _enforce_query_quota(auth_context)
     requested_mode = request.retrieval_mode.lower()
     if requested_mode not in SUPPORTED_RETRIEVAL_MODES:
         raise HTTPException(status_code=400, detail=f"Unsupported retrieval mode: {request.retrieval_mode}")
@@ -999,6 +1045,8 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
                 "model": SETTINGS.llm_model or SETTINGS.llm_provider,
                 "latency_ms": event.latency_ms,
                 "estimated_cost": event.token_usage.get("estimated_cost", 0.0),
+                "prompt_tokens": event.token_usage.get("prompt_tokens", 0),
+                "answer_tokens": event.token_usage.get("answer_tokens", 0),
             },
             _safe_api_path(DEFAULT_AUDIT_LOG),
         )
@@ -1229,6 +1277,7 @@ async def upload_document(
         )
     if len(content) > SETTINGS.upload_max_bytes:
         raise HTTPException(status_code=413, detail=f"uploaded file exceeds {SETTINGS.upload_max_bytes} bytes")
+    _enforce_upload_quota(safe_workspace_id, len(content))
     saved_path.write_bytes(content)
     try:
         run_upload_scan(saved_path, SETTINGS.upload_scan_command)
