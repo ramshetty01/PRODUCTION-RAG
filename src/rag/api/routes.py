@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import re
 import shutil
@@ -57,7 +58,14 @@ SUPPORTED_RETRIEVAL_MODES = {"auto", "semantic", "exact", "hybrid", "sparse", "r
 AUTH_CONTEXTS = parse_api_keys(SETTINGS.api_keys)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEMO_DIR = PROJECT_ROOT / "demo"
+LEGAL_DIR = PROJECT_ROOT / "docs" / "legal"
 SUPPORTED_UPLOAD_SUFFIXES = SUPPORTED_DOCUMENT_SUFFIXES
+LEGAL_PAGES = {
+    "privacy": "privacy.md",
+    "terms": "terms.md",
+    "data-deletion": "data-deletion.md",
+    "subprocessors": "subprocessors.md",
+}
 
 
 class HealthResponse(BaseModel):
@@ -993,6 +1001,42 @@ def demo_font(font_name: str):
 @router.get("/admin", include_in_schema=False)
 def admin_console():
     return FileResponse(DEMO_DIR / "admin.html")
+
+
+def _render_legal_markdown(markdown: str) -> str:
+    parts = ['<!doctype html><html lang="en"><meta charset="utf-8"><title>Production RAG Legal</title><body>']
+    in_list = False
+    for line in markdown.splitlines():
+        line = line.strip()
+        if not line:
+            if in_list:
+                parts.append("</ul>")
+                in_list = False
+            continue
+        if line.startswith("# "):
+            parts.append(f"<h1>{html.escape(line[2:])}</h1>")
+        elif line.startswith("## "):
+            parts.append(f"<h2>{html.escape(line[3:])}</h2>")
+        elif line.startswith("- "):
+            if not in_list:
+                parts.append("<ul>")
+                in_list = True
+            parts.append(f"<li>{html.escape(line[2:])}</li>")
+        else:
+            parts.append(f"<p>{html.escape(line)}</p>")
+    if in_list:
+        parts.append("</ul>")
+    parts.append("</body></html>")
+    return "\n".join(parts)
+
+
+@router.get("/legal/{page}", include_in_schema=False)
+def legal_page(page: str):
+    filename = LEGAL_PAGES.get(page)
+    if filename is None:
+        raise HTTPException(status_code=404, detail="legal page not found")
+    path = _safe_api_path(LEGAL_DIR / filename)
+    return Response(_render_legal_markdown(path.read_text(encoding="utf-8")), media_type="text/html")
 
 
 @router.get("/demo/admin.js", include_in_schema=False)

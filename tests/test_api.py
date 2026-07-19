@@ -155,6 +155,10 @@ def test_demo_frontend_assets_are_served():
     assert "Vendor evidence review" in page.text
     assert "Payroll policy check" in page.text
     assert "Usage/Billing" in page.text
+    assert 'href="/legal/privacy"' in page.text
+    assert 'href="/legal/terms"' in page.text
+    assert 'href="/legal/data-deletion"' in page.text
+    assert 'href="/legal/subprocessors"' in page.text
     assert "Local enterprise RAG" in page.text
     assert "What evidence is required before vendor onboarding?" in page.text
     assert "authType" in page.text
@@ -225,6 +229,7 @@ def test_demo_frontend_assets_are_served():
     assert ".app-sidebar" in styles.text
     assert ".chat-history" in styles.text
     assert ".profile-menu" in styles.text
+    assert ".legal-links" in styles.text
     assert ".chat-pane" in styles.text
     assert ".onboarding-panel" in styles.text
     assert ".onboarding-steps" in styles.text
@@ -267,6 +272,25 @@ def test_demo_frontend_assets_are_served():
     assert "mergeState" in state.text
     assert font.status_code == 200
     assert font.headers["content-type"].startswith("font/woff2")
+
+
+def test_legal_pages_are_served_from_editable_markdown():
+    client = TestClient(routes.create_app())
+
+    for page, title in [
+        ("privacy", "Privacy Policy"),
+        ("terms", "Terms of Service"),
+        ("data-deletion", "Data Deletion Policy"),
+        ("subprocessors", "Subprocessors"),
+    ]:
+        response = client.get(f"/legal/{page}")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/html")
+        assert f"<h1>{title}</h1>" in response.text
+        assert "placeholder" in response.text
+
+    missing = client.get("/legal/unknown")
+    assert missing.status_code == 404
 
 
 def test_admin_console_assets_are_served():
