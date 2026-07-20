@@ -28,7 +28,7 @@ services:
       - key: RAG_LLM_PROVIDER
         value: extractive
       - key: RAG_BOOTSTRAP_DEMO_INDEX
-        value: "true"
+        value: "false"
       - key: RAG_AUTH_MODE
         value: auto
       - key: RAG_API_KEYS
