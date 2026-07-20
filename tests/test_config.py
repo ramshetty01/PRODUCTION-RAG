@@ -220,6 +220,15 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.observability_export_api_key == "obs-key"
 
 
+def test_render_uses_hash_when_old_default_embedding_is_configured(tmp_path, monkeypatch):
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.delenv("RAG_EMBEDDING_MODEL", raising=False)
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("RAG_EMBEDDING_MODEL=all-MiniLM-L6-v2\n", encoding="utf-8")
+
+    assert load_settings(dotenv).embedding_model == "hash"
+
+
 def test_load_settings_reads_mounted_secrets_file(tmp_path, monkeypatch):
     for key in ["RAG_SECRETS_FILE", "RAG_LLM_API_KEY", "RAG_JWT_SECRET"]:
         monkeypatch.delenv(key, raising=False)
