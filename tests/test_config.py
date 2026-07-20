@@ -272,6 +272,17 @@ def test_s3_object_storage_requires_runtime_dependency(tmp_path, monkeypatch):
         load_settings(dotenv)
 
 
+def test_qdrant_vector_backend_requires_runtime_dependency(tmp_path, monkeypatch):
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("RAG_VECTOR_BACKEND=qdrant\nRAG_QDRANT_URL=https://qdrant.example\n", encoding="utf-8")
+
+    assert load_settings(dotenv).vector_backend == "qdrant"
+
+    monkeypatch.setattr("src.rag.config.find_spec", lambda module: None if module == "langchain_qdrant" else object())
+    with pytest.raises(ValueError, match="Qdrant vector backend requires langchain-qdrant"):
+        load_settings(dotenv)
+
+
 def test_env_example_documents_required_runtime_settings():
     env_example = open(".env.example", encoding="utf-8").read()
 

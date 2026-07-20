@@ -210,4 +210,6 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
             raise ValueError("production JWT auth requires RAG_JWT_SECRET")
     if settings.object_storage_backend.lower() == "s3":
         _require_module("boto3", "S3 object storage requires boto3")
+    if settings.vector_backend.lower() == "qdrant":
+        _require_module("langchain_qdrant", "Qdrant vector backend requires langchain-qdrant")
     return settings
