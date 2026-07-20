@@ -990,7 +990,7 @@ def _build_query_payload(request: QueryRequest, auth_context: AuthContext, reque
     requested_mode = request.retrieval_mode.lower()
     if requested_mode not in SUPPORTED_RETRIEVAL_MODES:
         raise HTTPException(status_code=400, detail=f"Unsupported retrieval mode: {request.retrieval_mode}")
-    if not RATE_LIMITER.allow("default"):
+    if not RATE_LIMITER.allow(auth_context.cache_scope()):
         raise HTTPException(status_code=429, detail="rate limit exceeded")
 
     safe_session_id = _safe_session_id(request.session_id)

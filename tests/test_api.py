@@ -1786,6 +1786,27 @@ def test_query_endpoint_scopes_public_tenant_to_own_workspace(monkeypatch):
     assert blocked.status_code == 404
 
 
+def test_query_rate_limit_key_is_scoped_by_tenant_and_subject(monkeypatch):
+    class RecordingLimiter:
+        keys = []
+
+        def allow(self, key):
+            self.keys.append(key)
+            return True
+
+    limiter = RecordingLimiter()
+    routes.QUERY_CACHE.values.clear()
+    monkeypatch.setattr(routes, "RATE_LIMITER", limiter)
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("tenant-a-key:public:tenant-a,tenant-b-key:public:tenant-b"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    client = TestClient(routes.create_app())
+
+    assert client.post("/query", headers={"X-API-Key": "tenant-a-key"}, json={"query": "runner"}).status_code == 200
+    assert client.post("/query", headers={"X-API-Key": "tenant-b-key"}, json={"query": "runner"}).status_code == 200
+
+    assert limiter.keys == ["tenant-a:api-key:tenant:public", "tenant-b:api-key:tenant:public"]
+
+
 def test_query_endpoint_rejects_missing_and_invalid_api_key_when_configured(monkeypatch):
     routes.QUERY_CACHE.values.clear()
     monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("public-key:public"))
