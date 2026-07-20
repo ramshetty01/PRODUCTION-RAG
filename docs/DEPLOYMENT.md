@@ -243,7 +243,8 @@ Environment variables are documented in `.env.example`:
 - `RAG_DATABASE_URL`: Supabase/Render Postgres connection string used when
   `RAG_METADATA_BACKEND=postgres`.
 - `RAG_MANIFEST_PATH`: ingestion manifest location.
-- `RAG_EMBEDDING_MODEL`: default embedding model name.
+- `RAG_EMBEDDING_MODEL`: `hash` by default for low-memory deploys; set a
+  sentence-transformer model when the host has enough memory.
 - `RAG_TOP_K`: default retrieval size.
 - `RAG_LOG_LEVEL`: application log level.
 - `RAG_API_KEYS`: optional comma-separated API key map in

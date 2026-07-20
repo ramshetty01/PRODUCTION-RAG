@@ -3,14 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from langchain_chroma import Chroma
-from src.rag.chunking import DEFAULT_DB_PATH, EMBEDDING_MODEL
-from src.rag.config import RuntimeSettings
+from src.rag.chunking import DEFAULT_DB_PATH
+from src.rag.config import DEFAULT_EMBEDDING_MODEL, RuntimeSettings
 from src.rag.models import get_model_provider
 
 SUPPORTED_VECTOR_BACKENDS = {"chroma", "qdrant"}
 
 
-def create_embeddings(model_name: str = EMBEDDING_MODEL, settings: RuntimeSettings | None = None):
+def create_embeddings(model_name: str = DEFAULT_EMBEDDING_MODEL, settings: RuntimeSettings | None = None):
     if settings is not None:
         return get_model_provider(settings).embeddings()
     settings = RuntimeSettings(embedding_model=model_name)
