@@ -233,6 +233,34 @@ def test_production_environment_rejects_local_default_paths(tmp_path, monkeypatc
         load_settings(dotenv)
 
 
+def test_production_environment_requires_fail_closed_auth(tmp_path, monkeypatch):
+    for key in ["RAG_VECTOR_DB_PATH", "RAG_MANIFEST_PATH", "RAG_AUTH_MODE", "RAG_API_KEYS", "RAG_JWT_SECRET"]:
+        monkeypatch.delenv(key, raising=False)
+    base = "\n".join(
+        [
+            "RAG_ENVIRONMENT=production",
+            "RAG_VECTOR_DB_PATH=/srv/rag/chroma",
+            "RAG_MANIFEST_PATH=/srv/rag/manifest.json",
+        ]
+    )
+    dotenv = tmp_path / ".env"
+
+    dotenv.write_text(base + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="RAG_AUTH_MODE=api_key or jwt"):
+        load_settings(dotenv)
+
+    dotenv.write_text(base + "\nRAG_AUTH_MODE=api_key\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="RAG_API_KEYS"):
+        load_settings(dotenv)
+
+    dotenv.write_text(base + "\nRAG_AUTH_MODE=jwt\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="RAG_JWT_SECRET"):
+        load_settings(dotenv)
+
+    dotenv.write_text(base + "\nRAG_AUTH_MODE=api_key\nRAG_API_KEYS=key:public\n", encoding="utf-8")
+    assert load_settings(dotenv).auth_mode == "api_key"
+
+
 def test_env_example_documents_required_runtime_settings():
     env_example = open(".env.example", encoding="utf-8").read()
 

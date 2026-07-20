@@ -195,4 +195,11 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         or settings.manifest_path in {"data/processed/ingestion_manifest.json", "./data/processed/ingestion_manifest.json"}
     ):
         raise ValueError("production environment requires explicit non-local vector and manifest paths")
+    if settings.environment == "production":
+        if settings.auth_mode not in {"api_key", "jwt"}:
+            raise ValueError("production environment requires RAG_AUTH_MODE=api_key or jwt")
+        if settings.auth_mode == "api_key" and not settings.api_keys.strip():
+            raise ValueError("production API key auth requires RAG_API_KEYS")
+        if settings.auth_mode == "jwt" and not settings.jwt_secret.strip():
+            raise ValueError("production JWT auth requires RAG_JWT_SECRET")
     return settings
