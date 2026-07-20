@@ -99,6 +99,31 @@ class RecordingTelemetry:
         return SpanContext()
 
 
+class FakeMetadataStore:
+    def __init__(self, documents=None, jobs=None):
+        self.documents = {record["document_id"]: dict(record) for record in documents or []}
+        self.jobs = {job["job_id"]: dict(job) for job in jobs or []}
+        self.deleted_documents = []
+
+    def list_documents(self):
+        return list(self.documents.values())
+
+    def save_document(self, record):
+        self.documents[record["document_id"]] = dict(record)
+
+    def delete_document(self, document_id):
+        self.deleted_documents.append(document_id)
+        self.documents.pop(document_id, None)
+
+    def list_jobs(self):
+        return list(self.jobs.values())
+
+    def upsert_job(self, key, **updates):
+        current = dict(self.jobs.get(key, {"job_id": key}))
+        current.update(updates)
+        self.jobs[key] = current
+
+
 def test_health_endpoint_returns_status():
     client = TestClient(routes.create_app())
 
@@ -607,6 +632,31 @@ def test_ingestion_jobs_are_persisted_and_reloaded(tmp_path, monkeypatch):
     assert (tmp_path / "logs" / "ingestion_jobs.json").exists()
 
 
+def test_ingestion_jobs_use_metadata_store_when_postgres_enabled(tmp_path, monkeypatch):
+    store = FakeMetadataStore()
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            metadata_backend="postgres",
+            database_url="postgresql://localhost/rag",
+            manifest_path=str(tmp_path / "manifest.json"),
+            vector_db_path=str(tmp_path / "chroma_db"),
+        ),
+    )
+    monkeypatch.setattr(routes, "_metadata_store", lambda: store)
+    routes.INGESTION_JOBS.clear()
+
+    routes._set_ingestion_job("job-a", job_id="job-a", workspace_id="workspace-a", status="queued", progress=0)
+    routes.INGESTION_JOBS.clear()
+    routes._load_ingestion_jobs()
+
+    assert store.jobs["job-a"]["status"] == "queued"
+    assert routes._get_ingestion_job("job-a")["workspace_id"] == "workspace-a"
+    assert not (tmp_path / "logs" / "ingestion_jobs.json").exists()
+
+
 def test_ingestion_job_retries_then_completes(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
     routes.INGESTION_JOBS.clear()
@@ -1063,6 +1113,53 @@ def test_document_delete_removes_managed_storage_uri(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert deleted == ["s3://rag-documents/workspace-a/policy.md"]
+
+
+def test_document_delete_uses_metadata_store_when_postgres_enabled(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "policy.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Policy", encoding="utf-8")
+    store = FakeMetadataStore(
+        [
+            {
+                "chunk_count": 1,
+                "document_id": "policy",
+                "document_version": "v1",
+                "filename": "policy.md",
+                "source_path": str(source),
+                "status": "indexed",
+                "workspace_id": "workspace-a",
+            }
+        ]
+    )
+
+    class FakeVectorStore:
+        pass
+
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            metadata_backend="postgres",
+            database_url="postgresql://localhost/rag",
+            manifest_path=str(tmp_path / "manifest.json"),
+            vector_db_path=str(tmp_path / "chroma_db"),
+        ),
+    )
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "_metadata_store", lambda: store)
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    monkeypatch.setattr(routes, "delete_records_by_metadata", lambda *_args: 1)
+    client = TestClient(routes.create_app())
+
+    response = client.delete("/documents/policy", headers={"X-API-Key": "admin-key"}, params={"workspace_id": "workspace-a"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "deleted"
+    assert store.deleted_documents == ["policy"]
+    assert store.documents == {}
+    assert not source.exists()
 
 
 def test_document_list_exposes_failed_reason_and_retry_action(tmp_path, monkeypatch):
