@@ -23,6 +23,8 @@ class RuntimeSettings:
     vector_collection: str = "rag_chunks"
     qdrant_url: str = ""
     qdrant_api_key: str = ""
+    metadata_backend: str = "json"
+    database_url: str = ""
     manifest_path: str = "data/processed/ingestion_manifest.json"
     embedding_model: str = EMBEDDING_MODEL
     chunk_size: int = DEFAULT_CHUNK_TOKENS
@@ -141,6 +143,8 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         vector_collection=_setting_value(dotenv_values, "RAG_VECTOR_COLLECTION", "rag_chunks"),
         qdrant_url=_setting_value(dotenv_values, "RAG_QDRANT_URL", ""),
         qdrant_api_key=_setting_value(dotenv_values, "RAG_QDRANT_API_KEY", ""),
+        metadata_backend=_setting_value(dotenv_values, "RAG_METADATA_BACKEND", "json"),
+        database_url=_setting_value(dotenv_values, "RAG_DATABASE_URL", ""),
         manifest_path=_setting_value(dotenv_values, "RAG_MANIFEST_PATH", "data/processed/ingestion_manifest.json"),
         embedding_model=_setting_value(dotenv_values, "RAG_EMBEDDING_MODEL", EMBEDDING_MODEL),
         chunk_size=_setting_int(dotenv_values, "RAG_CHUNK_SIZE", DEFAULT_CHUNK_TOKENS),
@@ -212,4 +216,10 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         _require_module("boto3", "S3 object storage requires boto3")
     if settings.vector_backend.lower() == "qdrant":
         _require_module("langchain_qdrant", "Qdrant vector backend requires langchain-qdrant")
+    if settings.metadata_backend not in {"json", "postgres"}:
+        raise ValueError("RAG_METADATA_BACKEND must be json or postgres")
+    if settings.metadata_backend == "postgres":
+        if not settings.database_url.strip():
+            raise ValueError("RAG_DATABASE_URL is required when RAG_METADATA_BACKEND=postgres")
+        _require_module("psycopg", "Postgres metadata backend requires psycopg")
     return settings
