@@ -4,6 +4,7 @@ fastapi
 langchain-chroma
 langchain-community
 langchain-huggingface
+langchain-qdrant
 langchain-text-splitters
 packaging
 pypdf
