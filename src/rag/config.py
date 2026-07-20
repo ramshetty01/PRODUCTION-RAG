@@ -5,12 +5,15 @@ from importlib.util import find_spec
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.rag.chunking import DEFAULT_CHUNK_OVERLAP_TOKENS, DEFAULT_CHUNK_TOKENS, DEFAULT_DB_PATH, EMBEDDING_MODEL
+from src.rag.chunking import DEFAULT_CHUNK_OVERLAP_TOKENS, DEFAULT_CHUNK_TOKENS, DEFAULT_DB_PATH
 
 
 def _env_int(name: str, default: int) -> int:
     value = os.getenv(name)
     return int(value) if value not in (None, "") else default
+
+
+DEFAULT_EMBEDDING_MODEL = "hash"
 
 
 @dataclass(frozen=True)
@@ -26,7 +29,7 @@ class RuntimeSettings:
     metadata_backend: str = "json"
     database_url: str = ""
     manifest_path: str = "data/processed/ingestion_manifest.json"
-    embedding_model: str = EMBEDDING_MODEL
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL
     chunk_size: int = DEFAULT_CHUNK_TOKENS
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP_TOKENS
     top_k: int = 4
@@ -148,7 +151,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         metadata_backend=_setting_value(dotenv_values, "RAG_METADATA_BACKEND", "json"),
         database_url=_setting_value(dotenv_values, "RAG_DATABASE_URL", ""),
         manifest_path=_setting_value(dotenv_values, "RAG_MANIFEST_PATH", "data/processed/ingestion_manifest.json"),
-        embedding_model=_setting_value(dotenv_values, "RAG_EMBEDDING_MODEL", EMBEDDING_MODEL),
+        embedding_model=_setting_value(dotenv_values, "RAG_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
         chunk_size=_setting_int(dotenv_values, "RAG_CHUNK_SIZE", DEFAULT_CHUNK_TOKENS),
         chunk_overlap=_setting_int(dotenv_values, "RAG_CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP_TOKENS),
         top_k=_setting_int(dotenv_values, "RAG_TOP_K", 4),

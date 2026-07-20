@@ -8,7 +8,7 @@ data:
   RAG_PORT: "8000"
   RAG_VECTOR_DB_PATH: "/app/chroma_db"
   RAG_MANIFEST_PATH: "/app/data/processed/ingestion_manifest.json"
-  RAG_EMBEDDING_MODEL: "all-MiniLM-L6-v2"
+  RAG_EMBEDDING_MODEL: "hash"
   RAG_CHUNK_SIZE: "700"
   RAG_CHUNK_OVERLAP: "100"
   RAG_TOP_K: "4"
