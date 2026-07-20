@@ -151,6 +151,21 @@ def test_health_endpoint_returns_status():
     assert response.headers["X-Request-ID"]
 
 
+def test_safe_api_path_allows_configured_absolute_runtime_paths(tmp_path, monkeypatch):
+    runtime = tmp_path / "var" / "data" / "production-rag"
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            vector_db_path=str(runtime / "chroma_db"),
+            manifest_path=str(runtime / "ingestion_manifest.json"),
+        ),
+    )
+
+    assert routes._safe_api_path(runtime / "chroma_db") == (runtime / "chroma_db").resolve()
+    assert routes._safe_api_path(runtime / "ingestion_manifest.json") == (runtime / "ingestion_manifest.json").resolve()
+
+
 def test_llm_health_endpoint_returns_provider_status(monkeypatch):
     class FakeLLM:
         def health_check(self):
