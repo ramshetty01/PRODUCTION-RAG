@@ -104,6 +104,8 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_VECTOR_COLLECTION=prod_chunks",
                 "RAG_QDRANT_URL=https://qdrant.example",
                 "RAG_QDRANT_API_KEY=qdrant-key",
+                "RAG_METADATA_BACKEND=postgres",
+                "RAG_DATABASE_URL=postgresql://localhost/rag",
                 "RAG_CHUNK_SIZE=600",
                 "RAG_CHUNK_OVERLAP=80",
                 "RAG_TOP_K=6",
@@ -162,6 +164,8 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.vector_collection == "prod_chunks"
     assert settings.qdrant_url == "https://qdrant.example"
     assert settings.qdrant_api_key == "qdrant-key"
+    assert settings.metadata_backend == "postgres"
+    assert settings.database_url == "postgresql://localhost/rag"
     assert settings.chunk_size == 600
     assert settings.chunk_overlap == 80
     assert settings.top_k == 6
@@ -283,6 +287,20 @@ def test_qdrant_vector_backend_requires_runtime_dependency(tmp_path, monkeypatch
         load_settings(dotenv)
 
 
+def test_postgres_metadata_backend_requires_database_url_and_dependency(tmp_path, monkeypatch):
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("RAG_METADATA_BACKEND=postgres\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="RAG_DATABASE_URL"):
+        load_settings(dotenv)
+
+    dotenv.write_text("RAG_METADATA_BACKEND=postgres\nRAG_DATABASE_URL=postgresql://localhost/rag\n", encoding="utf-8")
+    assert load_settings(dotenv).metadata_backend == "postgres"
+
+    monkeypatch.setattr("src.rag.config.find_spec", lambda module: None if module == "psycopg" else object())
+    with pytest.raises(ValueError, match="Postgres metadata backend requires psycopg"):
+        load_settings(dotenv)
+
+
 def test_env_example_documents_required_runtime_settings():
     env_example = open(".env.example", encoding="utf-8").read()
 
@@ -292,6 +310,8 @@ def test_env_example_documents_required_runtime_settings():
     assert "RAG_VECTOR_COLLECTION=" in env_example
     assert "RAG_QDRANT_URL=" in env_example
     assert "RAG_QDRANT_API_KEY=" in env_example
+    assert "RAG_METADATA_BACKEND=" in env_example
+    assert "RAG_DATABASE_URL=" in env_example
     assert "RAG_CHUNK_OVERLAP=" in env_example
     assert "RAG_TOP_K=" in env_example
     assert "RAG_RETRIEVAL_MODE=" in env_example

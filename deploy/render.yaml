@@ -33,6 +33,10 @@ services:
         value: auto
       - key: RAG_API_KEYS
         sync: false
+      - key: RAG_METADATA_BACKEND
+        value: postgres
+      - key: RAG_DATABASE_URL
+        sync: false
       - key: RAG_LLM_API_KEY
         sync: false
       - key: RAG_JWT_SECRET

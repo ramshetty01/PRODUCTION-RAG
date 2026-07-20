@@ -89,6 +89,8 @@ def test_deployment_docs_include_build_run_and_health_commands():
     assert "RAG_API_KEYS=public-key:public:tenant-a" in docs
     assert "RAG_AUTH_MODE=jwt" in docs
     assert "RAG_JWT_SECRET=<strong-secret>" in docs
+    assert "RAG_METADATA_BACKEND" in docs
+    assert "RAG_DATABASE_URL" in docs
     assert "deploy/kubernetes" in docs
     assert "curl http://localhost:8000/health" in docs
 
@@ -166,6 +168,8 @@ def test_render_blueprint_defines_public_demo_service():
     assert "mountPath: /var/data/production-rag" in render
     assert "RAG_BOOTSTRAP_DEMO_INDEX" in render
     assert "RAG_API_KEYS" in render
+    assert "RAG_METADATA_BACKEND" in render
+    assert "RAG_DATABASE_URL" in render
     assert "sync: false" in render
     assert "uvicorn main:app" in start
     assert "scripts/ingest_corpus.py" in start

@@ -237,6 +237,10 @@ Environment variables are documented in `.env.example`:
 - `RAG_VECTOR_COLLECTION`: collection name used by the active vector backend.
 - `RAG_QDRANT_URL` and `RAG_QDRANT_API_KEY`: Qdrant connection settings when
   `RAG_VECTOR_BACKEND=qdrant`.
+- `RAG_METADATA_BACKEND`: `json` by default, or `postgres` for Supabase/Render
+  Postgres metadata and ingestion-job persistence.
+- `RAG_DATABASE_URL`: Supabase/Render Postgres connection string used when
+  `RAG_METADATA_BACKEND=postgres`.
 - `RAG_MANIFEST_PATH`: ingestion manifest location.
 - `RAG_EMBEDDING_MODEL`: default embedding model name.
 - `RAG_TOP_K`: default retrieval size.

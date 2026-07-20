@@ -7,6 +7,7 @@ langchain-huggingface
 langchain-qdrant
 langchain-text-splitters
 packaging
+psycopg[binary]
 pypdf
 python-multipart
 pytest
