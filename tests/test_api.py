@@ -1238,6 +1238,61 @@ def test_workspace_purge_deletes_documents_vectors_chats_and_logs(tmp_path, monk
     assert json.loads(manifest_path.read_text(encoding="utf-8"))["documents"] == {}
 
 
+def test_workspace_purge_removes_only_matching_managed_storage(tmp_path, monkeypatch):
+    source_a = tmp_path / "data" / "uploads" / "a.md"
+    source_b = tmp_path / "data" / "uploads" / "b.md"
+    source_a.parent.mkdir(parents=True)
+    source_a.write_text("# A", encoding="utf-8")
+    source_b.write_text("# B", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "a": {
+                        "chunk_count": 1,
+                        "document_id": "a",
+                        "document_version": "v1",
+                        "source_path": str(source_a),
+                        "storage_uri": "s3://rag-documents/workspace-a/a.md",
+                        "status": "indexed",
+                        "workspace_id": "workspace-a",
+                    },
+                    "b": {
+                        "chunk_count": 1,
+                        "document_id": "b",
+                        "document_version": "v1",
+                        "source_path": str(source_b),
+                        "storage_uri": "s3://rag-documents/workspace-b/b.md",
+                        "status": "indexed",
+                        "workspace_id": "workspace-b",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    deleted_storage = []
+
+    class FakeVectorStore:
+        pass
+
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest_path), vector_db_path=str(tmp_path / "chroma_db")))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    monkeypatch.setattr(routes, "delete_records_by_metadata", lambda *_args: 1)
+    monkeypatch.setattr(routes, "delete_stored_file", lambda uri, settings: deleted_storage.append(uri) or True)
+    client = TestClient(routes.create_app())
+
+    response = client.post("/workspaces/workspace-a/purge", headers={"X-API-Key": "admin-key"})
+
+    assert response.status_code == 200
+    assert deleted_storage == ["s3://rag-documents/workspace-a/a.md"]
+    assert list(json.loads(manifest_path.read_text(encoding="utf-8"))["documents"]) == ["b"]
+
+
 def test_scheduled_retention_deletes_expired_documents_and_audits(tmp_path, monkeypatch):
     uploads = tmp_path / "data" / "uploads"
     uploads.mkdir(parents=True)
