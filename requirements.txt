@@ -4,6 +4,7 @@ langchain-chroma
 langchain-community
 langchain-huggingface
 langchain-text-splitters
+packaging
 pypdf
 python-multipart
 pytest
