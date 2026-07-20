@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from importlib.util import find_spec
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -122,6 +123,11 @@ def _setting_float(dotenv_values: dict[str, str], name: str, default: float) -> 
     return float(value) if value not in (None, "") else default
 
 
+def _require_module(module: str, message: str) -> None:
+    if find_spec(module) is None:
+        raise ValueError(message)
+
+
 def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
     dotenv_values = load_dotenv(dotenv_path) if dotenv_path else {}
     secrets_file = os.getenv("RAG_SECRETS_FILE") or dotenv_values.get("RAG_SECRETS_FILE") or ""
@@ -202,4 +208,6 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
             raise ValueError("production API key auth requires RAG_API_KEYS")
         if settings.auth_mode == "jwt" and not settings.jwt_secret.strip():
             raise ValueError("production JWT auth requires RAG_JWT_SECRET")
+    if settings.object_storage_backend.lower() == "s3":
+        _require_module("boto3", "S3 object storage requires boto3")
     return settings

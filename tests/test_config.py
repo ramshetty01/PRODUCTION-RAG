@@ -261,6 +261,17 @@ def test_production_environment_requires_fail_closed_auth(tmp_path, monkeypatch)
     assert load_settings(dotenv).auth_mode == "api_key"
 
 
+def test_s3_object_storage_requires_runtime_dependency(tmp_path, monkeypatch):
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("RAG_OBJECT_STORAGE_BACKEND=s3\nRAG_OBJECT_STORAGE_BUCKET=rag-documents\n", encoding="utf-8")
+
+    assert load_settings(dotenv).object_storage_backend == "s3"
+
+    monkeypatch.setattr("src.rag.config.find_spec", lambda module: None if module == "boto3" else object())
+    with pytest.raises(ValueError, match="S3 object storage requires boto3"):
+        load_settings(dotenv)
+
+
 def test_env_example_documents_required_runtime_settings():
     env_example = open(".env.example", encoding="utf-8").read()
 
