@@ -229,6 +229,27 @@ def test_render_uses_hash_when_old_default_embedding_is_configured(tmp_path, mon
     assert load_settings(dotenv).embedding_model == "hash"
 
 
+def test_settings_infer_supabase_auth_and_openrouter_provider(tmp_path, monkeypatch):
+    for key in ["RAG_AUTH_MODE", "RAG_LLM_PROVIDER"]:
+        monkeypatch.delenv(key, raising=False)
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(
+        "\n".join(
+            [
+                "RAG_SUPABASE_JWT_SECRET=secret",
+                "RAG_LLM_API_KEY=sk-or-test",
+                "RAG_LLM_MODEL=nvidia/nemotron-3-ultra-550b-a55b",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(dotenv)
+
+    assert settings.auth_mode == "supabase"
+    assert settings.llm_provider == "openrouter"
+
+
 def test_load_settings_reads_mounted_secrets_file(tmp_path, monkeypatch):
     for key in ["RAG_SECRETS_FILE", "RAG_LLM_API_KEY", "RAG_JWT_SECRET"]:
         monkeypatch.delenv(key, raising=False)

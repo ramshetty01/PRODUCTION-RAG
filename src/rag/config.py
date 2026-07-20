@@ -137,6 +137,25 @@ def _embedding_model(dotenv_values: dict[str, str]) -> str:
     return value
 
 
+def _llm_provider(dotenv_values: dict[str, str]) -> str:
+    explicit = os.getenv("RAG_LLM_PROVIDER") or dotenv_values.get("RAG_LLM_PROVIDER")
+    if explicit:
+        return explicit
+    api_key = _setting_value(dotenv_values, "RAG_LLM_API_KEY", "")
+    if api_key.startswith("sk-or-"):
+        return "openrouter"
+    return "extractive"
+
+
+def _auth_mode(dotenv_values: dict[str, str]) -> str:
+    explicit = os.getenv("RAG_AUTH_MODE") or dotenv_values.get("RAG_AUTH_MODE")
+    if explicit:
+        return explicit
+    if _setting_value(dotenv_values, "RAG_SUPABASE_JWT_SECRET", ""):
+        return "supabase"
+    return "auto"
+
+
 def _require_module(module: str, message: str) -> None:
     if find_spec(module) is None:
         raise ValueError(message)
@@ -181,7 +200,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         quota_max_requests_per_user=_setting_int(dotenv_values, "RAG_QUOTA_MAX_REQUESTS_PER_USER", 0),
         quota_max_tokens_per_user=_setting_int(dotenv_values, "RAG_QUOTA_MAX_TOKENS_PER_USER", 0),
         quota_max_concurrent_jobs_per_workspace=_setting_int(dotenv_values, "RAG_QUOTA_MAX_CONCURRENT_JOBS_PER_WORKSPACE", 0),
-        llm_provider=_setting_value(dotenv_values, "RAG_LLM_PROVIDER", "extractive"),
+        llm_provider=_llm_provider(dotenv_values),
         llm_fallback_providers=_setting_value(dotenv_values, "RAG_LLM_FALLBACK_PROVIDERS", ""),
         llm_model=_setting_value(dotenv_values, "RAG_LLM_MODEL", ""),
         llm_api_key=_setting_value(dotenv_values, "RAG_LLM_API_KEY", ""),
@@ -200,7 +219,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         cache_backend=_setting_value(dotenv_values, "RAG_CACHE_BACKEND", "memory"),
         rate_limit_backend=_setting_value(dotenv_values, "RAG_RATE_LIMIT_BACKEND", "memory"),
         redis_url=_setting_value(dotenv_values, "RAG_REDIS_URL", ""),
-        auth_mode=_setting_value(dotenv_values, "RAG_AUTH_MODE", "auto"),
+        auth_mode=_auth_mode(dotenv_values),
         jwt_secret=_setting_value(dotenv_values, "RAG_JWT_SECRET", ""),
         jwt_issuer=_setting_value(dotenv_values, "RAG_JWT_ISSUER", ""),
         jwt_audience=_setting_value(dotenv_values, "RAG_JWT_AUDIENCE", ""),
