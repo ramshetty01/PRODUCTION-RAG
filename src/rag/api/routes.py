@@ -30,6 +30,7 @@ from src.rag.conversation import ConversationMemoryStore, ConversationTurn, buil
 from src.rag.evaluation_report import build_evaluation_report
 from src.rag.generation import generate_answer
 from src.rag.ingestion import DEFAULT_MANIFEST, load_manifest, plan_document_ingestion, record_document_ingestion, save_manifest
+from src.rag.metadata_store import build_metadata_store
 from src.rag.monitoring import DEFAULT_FEEDBACK_LOG, FeedbackEvent, append_feedback, load_feedback, monitoring_metrics
 from src.rag.models import LLM_PROVIDER_FAILURES, get_model_provider
 from src.rag.observability import (
@@ -499,12 +500,21 @@ def _ingestion_jobs_path() -> Path:
 
 
 def _persist_ingestion_jobs_unlocked() -> None:
+    if SETTINGS.metadata_backend == "postgres":
+        store = _metadata_store()
+        for job_key, job in INGESTION_JOBS.items():
+            store.upsert_job(job_key, **job)
+        return
     path = _ingestion_jobs_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(INGESTION_JOBS, sort_keys=True), encoding="utf-8")
 
 
 def _load_ingestion_jobs() -> None:
+    if SETTINGS.metadata_backend == "postgres":
+        with INGESTION_JOB_LOCK:
+            INGESTION_JOBS.update({job["job_id"]: job for job in _metadata_store().list_jobs() if job.get("job_id")})
+        return
     path = _ingestion_jobs_path()
     if not path.exists():
         return
@@ -703,9 +713,33 @@ def _document_manifest_path() -> Path:
     return _safe_api_path(SETTINGS.manifest_path)
 
 
+def _metadata_store():
+    return build_metadata_store(SETTINGS, _document_manifest_path(), _ingestion_jobs_path())
+
+
+def _load_document_manifest() -> dict:
+    if SETTINGS.metadata_backend == "postgres":
+        return {"documents": {record["document_id"]: record for record in _metadata_store().list_documents()}}
+    return load_manifest(_document_manifest_path())
+
+
+def _save_document_manifest(manifest: dict) -> None:
+    if SETTINGS.metadata_backend == "postgres":
+        store = _metadata_store()
+        for record in manifest.get("documents", {}).values():
+            store.save_document(record)
+        return
+    save_manifest(manifest, _document_manifest_path())
+
+
+def _delete_document_record(document_id: str) -> None:
+    if SETTINGS.metadata_backend == "postgres":
+        _metadata_store().delete_document(document_id)
+
+
 def _document_records(workspace_id: str | None = None) -> list[dict]:
     safe_workspace_id = _safe_workspace_id(workspace_id)
-    manifest = load_manifest(_document_manifest_path())
+    manifest = _load_document_manifest()
     records = []
     for record in manifest.get("documents", {}).values():
         records.append(_document_response_record(record))
@@ -776,7 +810,7 @@ def _index_uploaded_file(
         _set_ingestion_job(job_id, status="parsing", progress=20)
     manifest_path = _safe_api_path(SETTINGS.manifest_path)
     persist_dir = _safe_api_path(SETTINGS.vector_db_path)
-    manifest = load_manifest(manifest_path)
+    manifest = _load_document_manifest()
     decision = plan_document_ingestion(saved_path, manifest)
     if job_id:
         _set_ingestion_job(job_id, document_id=decision.document_id, document_version=decision.document_version)
@@ -798,7 +832,7 @@ def _index_uploaded_file(
     manifest["documents"][decision.document_id]["owner"] = owner or "unknown"
     if safe_workspace_id:
         manifest["documents"][decision.document_id]["workspace_id"] = safe_workspace_id
-    save_manifest(manifest, manifest_path)
+    _save_document_manifest(manifest)
     _clear_query_cache()
     response = UploadIngestResponse(
         filename=safe_name,
@@ -877,7 +911,7 @@ def _record_ingested_at(record: dict) -> datetime | None:
 def _run_scheduled_retention(persist_dir: str | None = None, now: datetime | None = None) -> RetentionRunResponse:
     now = now or datetime.now(UTC)
     manifest_path = _document_manifest_path()
-    manifest = load_manifest(manifest_path)
+    manifest = _load_document_manifest()
     expired = []
     for record in manifest.get("documents", {}).values():
         ingested_at = _record_ingested_at(record)
@@ -901,6 +935,7 @@ def _run_scheduled_retention(persist_dir: str | None = None, now: datetime | Non
             source_path.unlink()
             files_deleted += 1
         manifest["documents"].pop(document_id, None)
+        _delete_document_record(document_id)
         append_audit_event(
             {
                 "timestamp": now.isoformat(),
@@ -912,7 +947,7 @@ def _run_scheduled_retention(persist_dir: str | None = None, now: datetime | Non
             _safe_api_path(DEFAULT_AUDIT_LOG),
         )
 
-    save_manifest(manifest, manifest_path)
+    _save_document_manifest(manifest)
     _clear_query_cache()
     return RetentionRunResponse(
         status="ok",
@@ -1470,7 +1505,7 @@ def delete_document(
 ):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     manifest_path = _document_manifest_path()
-    manifest = load_manifest(manifest_path)
+    manifest = _load_document_manifest()
     record = manifest.get("documents", {}).get(document_id)
     if record is None:
         raise HTTPException(status_code=404, detail="document not found")
@@ -1488,7 +1523,8 @@ def delete_document(
     source_path.unlink(missing_ok=True)
     delete_stored_file(record.get("storage_uri"), SETTINGS)
     del manifest["documents"][document_id]
-    save_manifest(manifest, manifest_path)
+    _delete_document_record(document_id)
+    _save_document_manifest(manifest)
     _clear_query_cache()
     _audit_admin_action("admin_document_delete", auth_context, record.get("workspace_id"), document_id)
     return DeleteDocumentResponse(
@@ -1507,7 +1543,7 @@ def rename_document(
 ):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     manifest_path = _document_manifest_path()
-    manifest = load_manifest(manifest_path)
+    manifest = _load_document_manifest()
     record = manifest.get("documents", {}).get(document_id)
     if record is None:
         raise HTTPException(status_code=404, detail="document not found")
@@ -1515,7 +1551,7 @@ def rename_document(
         raise HTTPException(status_code=404, detail="document not found")
     _require_workspace_admin(auth_context, record.get("workspace_id") or safe_workspace_id)
     record["filename"] = sanitize_upload_filename(request.filename)
-    save_manifest(manifest, manifest_path)
+    _save_document_manifest(manifest)
     _audit_admin_action("admin_document_rename", auth_context, record.get("workspace_id"), document_id)
     return DocumentRecordResponse(**_document_response_record(record))
 
@@ -1532,7 +1568,7 @@ def purge_workspace(
     _require_workspace_admin(auth_context, safe_workspace_id)
 
     manifest_path = _document_manifest_path()
-    manifest = load_manifest(manifest_path)
+    manifest = _load_document_manifest()
     records = [
         record
         for record in manifest.get("documents", {}).values()
@@ -1549,8 +1585,9 @@ def purge_workspace(
             files_deleted += 1
         delete_stored_file(record.get("storage_uri"), SETTINGS)
         manifest["documents"].pop(record["document_id"], None)
+        _delete_document_record(record["document_id"])
 
-    save_manifest(manifest, manifest_path)
+    _save_document_manifest(manifest)
     _clear_query_cache()
     conversations_deleted = CONVERSATION_MEMORY.clear_workspace(safe_workspace_id)
     logs_deleted = _purge_logs() if SETTINGS.retention_purge_logs else 0
@@ -1596,7 +1633,7 @@ def reindex_document(
 ):
     safe_workspace_id = _safe_workspace_id(workspace_id)
     manifest_path = _document_manifest_path()
-    manifest = load_manifest(manifest_path)
+    manifest = _load_document_manifest()
     record = manifest.get("documents", {}).get(document_id)
     if record is None:
         raise HTTPException(status_code=404, detail="document not found")
@@ -1626,12 +1663,12 @@ def reindex_document(
     )
     vector_records = count_records(vectorstore)
     decision = plan_document_ingestion(source_path, manifest, document_id=document_id)
-    record_document_ingestion(manifest, decision, source_path, chunk_count=len(chunks))
+    record_document_ingestion(manifest, decision, source_path, chunk_count=len(chunks), storage_uri=record.get("storage_uri"))
     manifest["documents"][document_id]["document_version"] = document_version
     manifest["documents"][document_id]["filename"] = record.get("filename") or source_path.name
     manifest["documents"][document_id]["workspace_id"] = workspace
     manifest["documents"][document_id]["access_roles"] = access_roles
-    save_manifest(manifest, manifest_path)
+    _save_document_manifest(manifest)
     _clear_query_cache()
     _audit_admin_action("admin_document_reindex", auth_context, workspace, document_id)
     return UploadIngestResponse(
