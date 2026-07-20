@@ -53,6 +53,15 @@ class JsonMetadataStore:
             _save_jobs(self.jobs_path, jobs)
             return dict(job)
 
+    def ensure_account(self, *, subject: str, email: str, name: str, organization_id: str) -> dict:
+        return {"subject": subject, "email": email, "name": name, "organization_id": organization_id}
+
+    def get_api_key(self, key_hash: str) -> dict | None:
+        return None
+
+    def touch_api_key(self, key_id: str) -> None:
+        return None
+
 
 @dataclass
 class PostgresMetadataStore:
@@ -137,6 +146,51 @@ class PostgresMetadataStore:
             )
             conn.commit()
         return job
+
+    def ensure_account(self, *, subject: str, email: str, name: str, organization_id: str) -> dict:
+        user_id = subject.removeprefix("jwt:")
+        user_email = email or f"{user_id}@local.invalid"
+        with self._connect() as conn:
+            conn.execute(
+                """
+                insert into organizations (id, name)
+                values (%s, %s)
+                on conflict (id) do nothing
+                """,
+                (organization_id, organization_id),
+            )
+            conn.execute(
+                """
+                insert into users (id, organization_id, email, name)
+                values (%s, %s, %s, %s)
+                on conflict (id) do update set
+                    organization_id = excluded.organization_id,
+                    email = excluded.email,
+                    name = excluded.name
+                """,
+                (user_id, organization_id, user_email, name),
+            )
+            conn.commit()
+        return {"subject": subject, "email": user_email, "name": name, "organization_id": organization_id}
+
+    def get_api_key(self, key_hash: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                select id, organization_id, scopes, revoked_at
+                from api_keys
+                where key_hash = %s
+                """,
+                (key_hash,),
+            ).fetchone()
+        if not row or row[3] is not None:
+            return None
+        return {"id": row[0], "organization_id": row[1], "scopes": list(row[2] or [])}
+
+    def touch_api_key(self, key_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("update api_keys set last_used_at = now() where id = %s", (key_id,))
+            conn.commit()
 
     def _connect(self):
         import psycopg

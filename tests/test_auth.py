@@ -48,6 +48,27 @@ def test_authenticate_jwt_derives_subject_roles_and_tenant():
     assert context.tenant_id == "tenant-a"
 
 
+def test_authenticate_jwt_derives_supabase_metadata():
+    token = sign_jwt(
+        {
+            "sub": "user-1",
+            "email": "ram@example.com",
+            "app_metadata": {"roles": ["public", "org-admin"], "organization_id": "workspace-a"},
+            "user_metadata": {"name": "Ram"},
+            "exp": 2_000_000_000,
+        },
+        "secret",
+    )
+
+    context = authenticate_jwt(f"Bearer {token}", "secret", now=1_700_000_000)
+
+    assert context.subject == "jwt:user-1"
+    assert context.roles == {"public", "org-admin"}
+    assert context.tenant_id == "workspace-a"
+    assert context.email == "ram@example.com"
+    assert context.name == "Ram"
+
+
 def test_authenticate_jwt_rejects_invalid_signature_and_expired_token():
     valid = sign_jwt({"sub": "user-1", "exp": 2_000_000_000}, "secret")
     expired = sign_jwt({"sub": "user-1", "exp": 1}, "secret")

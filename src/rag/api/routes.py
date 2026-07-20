@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, FastAPI, File, Form, Header, HTTPExcepti
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from src.rag.auth import AuthContext, authenticate_request, parse_api_keys
+from src.rag.auth import AuthContext, authenticate_api_key, authenticate_request, hash_api_key, parse_api_keys
 from src.rag.audit import DEFAULT_AUDIT_LOG, append_audit_event, audit_events_csv, load_audit_events
 from src.rag.chunking import (
     DEFAULT_DB_PATH,
@@ -289,6 +289,15 @@ class AuditResponse(BaseModel):
     events: list[dict]
 
 
+class AccountResponse(BaseModel):
+    subject: str
+    email: str = ""
+    name: str = ""
+    roles: list[str]
+    workspace_id: str
+    organization_id: str
+
+
 router = APIRouter()
 QUERY_CACHE = build_query_cache(SETTINGS.cache_backend, SETTINGS.redis_url)
 RATE_LIMITER = build_rate_limiter(SETTINGS.rate_limit_backend, SETTINGS.redis_url, max_requests=120, window_seconds=60)
@@ -308,17 +317,46 @@ def _auth_context(
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> AuthContext:
     try:
-        return authenticate_request(
+        if SETTINGS.auth_mode.lower() == "api_key" and x_api_key and SETTINGS.metadata_backend == "postgres":
+            try:
+                return authenticate_api_key(x_api_key, AUTH_CONTEXTS, allow_dev_public=False)
+            except PermissionError:
+                context = _database_api_key_context(x_api_key)
+                if context:
+                    return context
+                raise
+        context = authenticate_request(
             SETTINGS.auth_mode,
             api_key=x_api_key,
             authorization_header=authorization,
             configured_keys=AUTH_CONTEXTS,
-            jwt_secret=SETTINGS.jwt_secret,
+            jwt_secret=SETTINGS.supabase_jwt_secret or SETTINGS.jwt_secret,
             jwt_issuer=SETTINGS.jwt_issuer,
             jwt_audience=SETTINGS.jwt_audience,
         )
+        return _ensure_account_context(context)
     except PermissionError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+def _database_api_key_context(api_key: str) -> AuthContext | None:
+    record = _metadata_store().get_api_key(hash_api_key(api_key))
+    if not record:
+        return None
+    _metadata_store().touch_api_key(record["id"])
+    roles = {str(scope) for scope in record.get("scopes") or ["public"] if str(scope)}
+    return AuthContext(subject=f"api-key:{record['id']}", roles=roles or {"public"}, tenant_id=record.get("organization_id") or "default")
+
+
+def _ensure_account_context(context: AuthContext) -> AuthContext:
+    if SETTINGS.metadata_backend == "postgres" and context.subject.startswith("jwt:"):
+        _metadata_store().ensure_account(
+            subject=context.subject,
+            email=context.email,
+            name=context.name,
+            organization_id=context.tenant_id,
+        )
+    return context
 
 
 def _admin_context(auth_context: AuthContext = Depends(_auth_context)) -> AuthContext:
@@ -1189,6 +1227,18 @@ def _answer_stream_chunks(answer: str):
 @router.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(status="ok")
+
+
+@router.get("/account/me", response_model=AccountResponse)
+def account_me(auth_context: AuthContext = Depends(_auth_context)):
+    return AccountResponse(
+        subject=auth_context.subject,
+        email=auth_context.email,
+        name=auth_context.name,
+        roles=sorted(auth_context.roles),
+        workspace_id=auth_context.tenant_id,
+        organization_id=auth_context.tenant_id,
+    )
 
 
 @router.get("/llm/health", response_model=LLMHealthResponse)

@@ -134,8 +134,9 @@ curl -X POST https://production-rag-demo.onrender.com/query \
 ```
 
 Secrets must be configured in the hosting provider, not committed to git.
-`deploy/render.yaml` marks `RAG_API_KEYS`, `RAG_LLM_API_KEY`, and
-`RAG_JWT_SECRET` as manually synced environment variables.
+`deploy/render.yaml` marks `RAG_DATABASE_URL`, `RAG_API_KEYS`,
+`RAG_LLM_API_KEY`, `RAG_JWT_SECRET`, `RAG_SUPABASE_URL`, and
+`RAG_SUPABASE_JWT_SECRET` as manually synced environment variables.
 
 After deployment, run the smoke test:
 

@@ -30,7 +30,7 @@ services:
       - key: RAG_BOOTSTRAP_DEMO_INDEX
         value: "true"
       - key: RAG_AUTH_MODE
-        value: auto
+        value: supabase
       - key: RAG_API_KEYS
         sync: false
       - key: RAG_METADATA_BACKEND
@@ -40,4 +40,8 @@ services:
       - key: RAG_LLM_API_KEY
         sync: false
       - key: RAG_JWT_SECRET
+        sync: false
+      - key: RAG_SUPABASE_URL
+        sync: false
+      - key: RAG_SUPABASE_JWT_SECRET
         sync: false
