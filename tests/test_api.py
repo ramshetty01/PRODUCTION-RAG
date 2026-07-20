@@ -652,7 +652,7 @@ def test_tenant_users_only_see_their_documents_and_jobs(tmp_path, monkeypatch):
     routes.INGESTION_JOBS["job-a"] = {"job_id": "job-a", "workspace_id": "tenant-a", "status": "queued", "progress": 0}
     routes.INGESTION_JOBS["job-b"] = {"job_id": "job-b", "workspace_id": "tenant-b", "status": "queued", "progress": 0}
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
-    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest_path)))
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest_path), vector_db_path=str(tmp_path / "chroma_db")))
     monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("tenant-a-key:public:tenant-a,tenant-b-key:public:tenant-b"))
     client = TestClient(routes.create_app())
 
@@ -995,6 +995,50 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
         "vector_records_deleted": 3,
     }
     assert not source.exists()
+
+
+def test_document_delete_removes_managed_storage_uri(tmp_path, monkeypatch):
+    source = tmp_path / "data" / "uploads" / "policy.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Policy", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "policy": {
+                        "chunk_count": 1,
+                        "document_id": "policy",
+                        "document_version": "v1",
+                        "filename": "policy.md",
+                        "source_path": str(source),
+                        "storage_uri": "s3://rag-documents/workspace-a/policy.md",
+                        "status": "indexed",
+                        "workspace_id": "workspace-a",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    deleted = []
+
+    class FakeVectorStore:
+        pass
+
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest_path), vector_db_path=str(tmp_path / "chroma_db")))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: FakeVectorStore())
+    monkeypatch.setattr(routes, "delete_records_by_metadata", lambda *_args: 1)
+    monkeypatch.setattr(routes, "delete_stored_file", lambda uri, settings: deleted.append(uri) or True)
+    client = TestClient(routes.create_app())
+
+    response = client.delete("/documents/policy", headers={"X-API-Key": "admin-key"}, params={"workspace_id": "workspace-a"})
+
+    assert response.status_code == 200
+    assert deleted == ["s3://rag-documents/workspace-a/policy.md"]
 
 
 def test_document_list_exposes_failed_reason_and_retry_action(tmp_path, monkeypatch):
