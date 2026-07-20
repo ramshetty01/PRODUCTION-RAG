@@ -13,6 +13,8 @@ class AuthContext:
     subject: str
     roles: set[str]
     tenant_id: str = "default"
+    email: str = ""
+    name: str = ""
 
     def cache_scope(self) -> str:
         roles = "|".join(sorted(self.roles))
@@ -50,6 +52,10 @@ def authenticate_api_key(
     if context is None:
         raise PermissionError("invalid API key")
     return context
+
+
+def hash_api_key(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
 def _b64url_decode(value: str) -> bytes:
@@ -114,14 +120,18 @@ def authenticate_jwt(
     subject = str(payload.get("sub") or "")
     if not subject:
         raise PermissionError("missing JWT subject")
-    raw_roles = payload.get("roles", ["public"])
+    app_metadata = payload.get("app_metadata") if isinstance(payload.get("app_metadata"), dict) else {}
+    user_metadata = payload.get("user_metadata") if isinstance(payload.get("user_metadata"), dict) else {}
+    raw_roles = payload.get("roles") or app_metadata.get("roles") or ["public"]
     if isinstance(raw_roles, str):
         raw_roles = [raw_roles]
     roles = {str(role) for role in raw_roles if str(role)}
     if not roles:
         roles = {"public"}
-    tenant_id = str(payload.get("tenant_id") or payload.get("tenant") or "default")
-    return AuthContext(subject=f"jwt:{subject}", roles=roles, tenant_id=tenant_id)
+    tenant_id = str(payload.get("tenant_id") or payload.get("tenant") or payload.get("organization_id") or app_metadata.get("organization_id") or "default")
+    email = str(payload.get("email") or "")
+    name = str(payload.get("name") or user_metadata.get("name") or (email.split("@")[0] if email else ""))
+    return AuthContext(subject=f"jwt:{subject}", roles=roles, tenant_id=tenant_id, email=email, name=name)
 
 
 def authenticate_request(
@@ -142,7 +152,7 @@ def authenticate_request(
         return AuthContext(subject="dev-public", roles={"public"})
     if mode == "api_key":
         return authenticate_api_key(api_key, configured_keys, allow_dev_public=False)
-    if mode == "jwt":
+    if mode in {"jwt", "supabase"}:
         return authenticate_jwt(
             authorization_header,
             secret=jwt_secret,

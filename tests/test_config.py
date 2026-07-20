@@ -35,6 +35,8 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
         "RAG_JWT_SECRET",
         "RAG_JWT_ISSUER",
         "RAG_JWT_AUDIENCE",
+        "RAG_SUPABASE_URL",
+        "RAG_SUPABASE_JWT_SECRET",
         "RAG_OTEL_ENABLED",
         "RAG_OTEL_SERVICE_NAME",
         "RAG_OTEL_EXPORTER_OTLP_ENDPOINT",
@@ -74,6 +76,8 @@ def test_load_settings_uses_defaults_without_dotenv(monkeypatch):
     assert settings.redis_url == ""
     assert settings.auth_mode == "auto"
     assert settings.jwt_secret == ""
+    assert settings.supabase_url == ""
+    assert settings.supabase_jwt_secret == ""
     assert settings.otel_enabled is False
     assert settings.otel_service_name == "production-rag"
     assert settings.otel_exporter_otlp_endpoint == ""
@@ -144,6 +148,8 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
                 "RAG_JWT_SECRET=secret",
                 "RAG_JWT_ISSUER=issuer",
                 "RAG_JWT_AUDIENCE=rag-api",
+                "RAG_SUPABASE_URL=https://example.supabase.co",
+                "RAG_SUPABASE_JWT_SECRET=supabase-secret",
                 "RAG_OTEL_ENABLED=true",
                 "RAG_OTEL_SERVICE_NAME=rag-test",
                 "RAG_OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318/v1/traces",
@@ -204,6 +210,8 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.jwt_secret == "secret"
     assert settings.jwt_issuer == "issuer"
     assert settings.jwt_audience == "rag-api"
+    assert settings.supabase_url == "https://example.supabase.co"
+    assert settings.supabase_jwt_secret == "supabase-secret"
     assert settings.otel_enabled is True
     assert settings.otel_service_name == "rag-test"
     assert settings.otel_exporter_otlp_endpoint == "http://collector:4318/v1/traces"
@@ -250,7 +258,7 @@ def test_production_environment_requires_fail_closed_auth(tmp_path, monkeypatch)
     dotenv = tmp_path / ".env"
 
     dotenv.write_text(base + "\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="RAG_AUTH_MODE=api_key or jwt"):
+    with pytest.raises(ValueError, match="RAG_AUTH_MODE=api_key, jwt, or supabase"):
         load_settings(dotenv)
 
     dotenv.write_text(base + "\nRAG_AUTH_MODE=api_key\n", encoding="utf-8")
@@ -263,6 +271,13 @@ def test_production_environment_requires_fail_closed_auth(tmp_path, monkeypatch)
 
     dotenv.write_text(base + "\nRAG_AUTH_MODE=api_key\nRAG_API_KEYS=key:public\n", encoding="utf-8")
     assert load_settings(dotenv).auth_mode == "api_key"
+
+    dotenv.write_text(base + "\nRAG_AUTH_MODE=supabase\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="RAG_SUPABASE_JWT_SECRET"):
+        load_settings(dotenv)
+
+    dotenv.write_text(base + "\nRAG_AUTH_MODE=supabase\nRAG_SUPABASE_JWT_SECRET=secret\n", encoding="utf-8")
+    assert load_settings(dotenv).auth_mode == "supabase"
 
 
 def test_s3_object_storage_requires_runtime_dependency(tmp_path, monkeypatch):

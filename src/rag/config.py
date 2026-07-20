@@ -68,6 +68,8 @@ class RuntimeSettings:
     jwt_secret: str = ""
     jwt_issuer: str = ""
     jwt_audience: str = ""
+    supabase_url: str = ""
+    supabase_jwt_secret: str = ""
     otel_enabled: bool = False
     otel_service_name: str = "production-rag"
     otel_exporter_otlp_endpoint: str = ""
@@ -192,6 +194,8 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         jwt_secret=_setting_value(dotenv_values, "RAG_JWT_SECRET", ""),
         jwt_issuer=_setting_value(dotenv_values, "RAG_JWT_ISSUER", ""),
         jwt_audience=_setting_value(dotenv_values, "RAG_JWT_AUDIENCE", ""),
+        supabase_url=_setting_value(dotenv_values, "RAG_SUPABASE_URL", ""),
+        supabase_jwt_secret=_setting_value(dotenv_values, "RAG_SUPABASE_JWT_SECRET", ""),
         otel_enabled=_setting_bool(dotenv_values, "RAG_OTEL_ENABLED", False),
         otel_service_name=_setting_value(dotenv_values, "RAG_OTEL_SERVICE_NAME", "production-rag"),
         otel_exporter_otlp_endpoint=_setting_value(dotenv_values, "RAG_OTEL_EXPORTER_OTLP_ENDPOINT", ""),
@@ -206,12 +210,14 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
     ):
         raise ValueError("production environment requires explicit non-local vector and manifest paths")
     if settings.environment == "production":
-        if settings.auth_mode not in {"api_key", "jwt"}:
-            raise ValueError("production environment requires RAG_AUTH_MODE=api_key or jwt")
+        if settings.auth_mode not in {"api_key", "jwt", "supabase"}:
+            raise ValueError("production environment requires RAG_AUTH_MODE=api_key, jwt, or supabase")
         if settings.auth_mode == "api_key" and not settings.api_keys.strip():
             raise ValueError("production API key auth requires RAG_API_KEYS")
         if settings.auth_mode == "jwt" and not settings.jwt_secret.strip():
             raise ValueError("production JWT auth requires RAG_JWT_SECRET")
+        if settings.auth_mode == "supabase" and not (settings.supabase_jwt_secret or settings.jwt_secret).strip():
+            raise ValueError("production Supabase auth requires RAG_SUPABASE_JWT_SECRET")
     if settings.object_storage_backend.lower() == "s3":
         _require_module("boto3", "S3 object storage requires boto3")
     if settings.vector_backend.lower() == "qdrant":

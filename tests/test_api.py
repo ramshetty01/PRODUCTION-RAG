@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 
-from src.rag.auth import sign_jwt
+from src.rag.auth import hash_api_key, sign_jwt
 from src.rag.api import routes
 from src.rag.config import RuntimeSettings
 
@@ -100,10 +100,13 @@ class RecordingTelemetry:
 
 
 class FakeMetadataStore:
-    def __init__(self, documents=None, jobs=None):
+    def __init__(self, documents=None, jobs=None, api_keys=None):
         self.documents = {record["document_id"]: dict(record) for record in documents or []}
         self.jobs = {job["job_id"]: dict(job) for job in jobs or []}
+        self.api_keys = {record["key_hash"]: dict(record) for record in api_keys or []}
         self.deleted_documents = []
+        self.accounts = []
+        self.touched_keys = []
 
     def list_documents(self):
         return list(self.documents.values())
@@ -122,6 +125,20 @@ class FakeMetadataStore:
         current = dict(self.jobs.get(key, {"job_id": key}))
         current.update(updates)
         self.jobs[key] = current
+
+    def ensure_account(self, *, subject, email, name, organization_id):
+        account = {"subject": subject, "email": email, "name": name, "organization_id": organization_id}
+        self.accounts.append(account)
+        return account
+
+    def get_api_key(self, key_hash):
+        record = self.api_keys.get(key_hash)
+        if not record or record.get("revoked_at"):
+            return None
+        return dict(record)
+
+    def touch_api_key(self, key_id):
+        self.touched_keys.append(key_id)
 
 
 def test_health_endpoint_returns_status():
@@ -1954,6 +1971,81 @@ def test_query_endpoint_derives_admin_role_from_jwt(monkeypatch):
     assert body["retrieval"]["auth_subject"] == "jwt:user-1"
     assert body["retrieval"]["auth_roles"] == ["admin", "public"]
     assert body["retrieval"]["tenant_id"] == "tenant-a"
+
+
+def test_account_me_accepts_supabase_jwt_and_provisions_account(tmp_path, monkeypatch):
+    store = FakeMetadataStore()
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            auth_mode="supabase",
+            metadata_backend="postgres",
+            database_url="postgresql://localhost/rag",
+            supabase_jwt_secret="supabase-secret",
+        ),
+    )
+    monkeypatch.setattr(routes, "_metadata_store", lambda: store)
+    token = sign_jwt(
+        {
+            "sub": "user-1",
+            "email": "ram@example.com",
+            "app_metadata": {"roles": ["public", "org-admin"], "organization_id": "workspace-a"},
+            "user_metadata": {"name": "Ram"},
+            "exp": 2_000_000_000,
+        },
+        "supabase-secret",
+    )
+    client = TestClient(routes.create_app())
+
+    response = client.get("/account/me", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "subject": "jwt:user-1",
+        "email": "ram@example.com",
+        "name": "Ram",
+        "roles": ["org-admin", "public"],
+        "workspace_id": "workspace-a",
+        "organization_id": "workspace-a",
+    }
+    assert store.accounts == [
+        {
+            "subject": "jwt:user-1",
+            "email": "ram@example.com",
+            "name": "Ram",
+            "organization_id": "workspace-a",
+        }
+    ]
+
+
+def test_account_me_accepts_postgres_api_key(tmp_path, monkeypatch):
+    store = FakeMetadataStore(
+        api_keys=[
+            {
+                "id": "key-1",
+                "organization_id": "workspace-a",
+                "key_hash": hash_api_key("live-key"),
+                "scopes": ["public", "workspace-admin"],
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(auth_mode="api_key", metadata_backend="postgres", database_url="postgresql://localhost/rag"),
+    )
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", {})
+    monkeypatch.setattr(routes, "_metadata_store", lambda: store)
+    client = TestClient(routes.create_app())
+
+    response = client.get("/account/me", headers={"X-API-Key": "live-key"})
+
+    assert response.status_code == 200
+    assert response.json()["subject"] == "api-key:key-1"
+    assert response.json()["roles"] == ["public", "workspace-admin"]
+    assert response.json()["workspace_id"] == "workspace-a"
+    assert store.touched_keys == ["key-1"]
 
 
 def test_query_endpoint_scopes_public_tenant_to_own_workspace(monkeypatch):
