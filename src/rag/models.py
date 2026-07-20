@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import re
 from dataclasses import replace
 from dataclasses import dataclass
 
@@ -17,6 +19,7 @@ from src.rag.llm.client import (
 
 
 LLM_PROVIDER_FAILURES: dict[str, int] = {}
+TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+")
 
 
 def _record_provider_failure(provider: str) -> None:
@@ -37,6 +40,8 @@ class ModelProvider:
 
 class LocalModelProvider(ModelProvider):
     def embeddings(self):
+        if self.settings.embedding_model == "hash":
+            return HashEmbeddings()
         return HuggingFaceEmbeddings(model_name=self.settings.embedding_model)
 
     def llm(self) -> LLMClient:
@@ -80,6 +85,26 @@ class LocalOpenAIModelProvider(LocalModelProvider):
             max_tokens=self.settings.llm_max_tokens,
             temperature=self.settings.llm_temperature,
         )
+
+
+@dataclass
+class HashEmbeddings:
+    dimensions: int = 384
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._embed(text) for text in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed(text)
+
+    def _embed(self, text: str) -> list[float]:
+        vector = [0.0] * self.dimensions
+        for token in TOKEN_PATTERN.findall(text.lower()):
+            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+            bucket = int.from_bytes(digest[:4], "big") % self.dimensions
+            vector[bucket] += 1.0 if digest[4] % 2 == 0 else -1.0
+        norm = sum(value * value for value in vector) ** 0.5 or 1.0
+        return [value / norm for value in vector]
 
 
 @dataclass

@@ -22,10 +22,11 @@ def build_chroma_db(
     persist_directory: str | Path = DEFAULT_DB_PATH,
     embedding_function=None,
     collection_name: str = "rag_chunks",
+    settings: RuntimeSettings | None = None,
 ):
     persist_directory = Path(persist_directory)
     persist_directory.mkdir(parents=True, exist_ok=True)
-    embeddings = embedding_function or create_embeddings()
+    embeddings = embedding_function or create_embeddings(settings=settings)
     return Chroma.from_documents(
         documents=list(chunks),
         embedding=embeddings,
@@ -38,8 +39,9 @@ def load_chroma_db(
     persist_directory: str | Path = DEFAULT_DB_PATH,
     embedding_function=None,
     collection_name: str = "rag_chunks",
+    settings: RuntimeSettings | None = None,
 ):
-    embeddings = embedding_function or create_embeddings()
+    embeddings = embedding_function or create_embeddings(settings=settings)
     return Chroma(
         persist_directory=str(persist_directory),
         embedding_function=embeddings,
@@ -83,6 +85,7 @@ def build_vector_db(
             persist_directory=persist_directory,
             embedding_function=embedding_function,
             collection_name=settings.vector_collection,
+            settings=settings,
         )
 
     qdrant = _require_qdrant()
@@ -109,6 +112,7 @@ def load_vector_db(
             persist_directory=persist_directory,
             embedding_function=embedding_function,
             collection_name=settings.vector_collection,
+            settings=settings,
         )
 
     qdrant = _require_qdrant()
