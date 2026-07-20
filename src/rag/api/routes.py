@@ -405,10 +405,17 @@ def _audit_admin_action(action: str, auth_context: AuthContext, workspace_id: st
 
 
 def _safe_api_path(path: str | Path) -> Path:
-    try:
-        return validate_path(path, PROJECT_ROOT)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    roots = [PROJECT_ROOT]
+    for configured in [SETTINGS.vector_db_path, SETTINGS.manifest_path]:
+        configured_path = Path(configured)
+        if configured_path.is_absolute():
+            roots.append(configured_path if configured_path.suffix == "" else configured_path.parent)
+    for root in roots:
+        try:
+            return validate_path(path, root)
+        except ValueError:
+            pass
+    raise HTTPException(status_code=400, detail=f"path is outside allowed roots: {path}")
 
 
 def _candidate_documents(vectorstore, query: str, top_k: int):
