@@ -245,6 +245,11 @@ Environment variables are documented in `.env.example`:
   `key:role1|role2[:tenant]` format. If unset, local development requests run
   as `public`.
 - `RAG_AUTH_MODE`: `dev`, `api_key`, or `jwt`.
+- Production must use `RAG_AUTH_MODE=api_key` with `RAG_API_KEYS`, or
+  `RAG_AUTH_MODE=jwt` with `RAG_JWT_SECRET`; `auto` and `dev` are local-only.
+  A minimal API-key setup is `RAG_API_KEYS=public-key:public:tenant-a`.
+  A minimal JWT setup is `RAG_JWT_SECRET=<strong-secret>` plus signed bearer
+  tokens containing `sub`, `roles`, and `tenant_id`.
 - `RAG_JWT_SECRET`, `RAG_JWT_ISSUER`, `RAG_JWT_AUDIENCE`: JWT validation
   settings for signed bearer-token deployments.
 - `RAG_QUOTA_MAX_DOCUMENTS_PER_WORKSPACE`,

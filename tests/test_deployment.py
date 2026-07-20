@@ -85,6 +85,10 @@ def test_deployment_docs_include_build_run_and_health_commands():
     assert "python scripts/smoke_deploy.py https://staging-rag.example.com" in docs
     assert "python scripts/smoke_deploy.py https://production-rag.example.com" in docs
     assert "RAG_ENVIRONMENT=production" in docs
+    assert "RAG_AUTH_MODE=api_key" in docs
+    assert "RAG_API_KEYS=public-key:public:tenant-a" in docs
+    assert "RAG_AUTH_MODE=jwt" in docs
+    assert "RAG_JWT_SECRET=<strong-secret>" in docs
     assert "deploy/kubernetes" in docs
     assert "curl http://localhost:8000/health" in docs
 
