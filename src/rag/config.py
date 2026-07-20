@@ -130,6 +130,13 @@ def _setting_float(dotenv_values: dict[str, str], name: str, default: float) -> 
     return float(value) if value not in (None, "") else default
 
 
+def _embedding_model(dotenv_values: dict[str, str]) -> str:
+    value = _setting_value(dotenv_values, "RAG_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
+    if os.getenv("RENDER") and value == "all-MiniLM-L6-v2":
+        return DEFAULT_EMBEDDING_MODEL
+    return value
+
+
 def _require_module(module: str, message: str) -> None:
     if find_spec(module) is None:
         raise ValueError(message)
@@ -151,7 +158,7 @@ def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
         metadata_backend=_setting_value(dotenv_values, "RAG_METADATA_BACKEND", "json"),
         database_url=_setting_value(dotenv_values, "RAG_DATABASE_URL", ""),
         manifest_path=_setting_value(dotenv_values, "RAG_MANIFEST_PATH", "data/processed/ingestion_manifest.json"),
-        embedding_model=_setting_value(dotenv_values, "RAG_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL),
+        embedding_model=_embedding_model(dotenv_values),
         chunk_size=_setting_int(dotenv_values, "RAG_CHUNK_SIZE", DEFAULT_CHUNK_TOKENS),
         chunk_overlap=_setting_int(dotenv_values, "RAG_CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP_TOKENS),
         top_k=_setting_int(dotenv_values, "RAG_TOP_K", 4),
