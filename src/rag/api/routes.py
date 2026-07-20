@@ -1545,6 +1545,7 @@ def purge_workspace(
         if source_path.exists():
             source_path.unlink()
             files_deleted += 1
+        delete_stored_file(record.get("storage_uri"), SETTINGS)
         manifest["documents"].pop(record["document_id"], None)
 
     save_manifest(manifest, manifest_path)
