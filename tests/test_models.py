@@ -9,7 +9,7 @@ from src.rag.llm.client import (
     OpenAILLMClient,
     OpenRouterLLMClient,
 )
-from src.rag.models import FallbackLLMClient, LLM_PROVIDER_FAILURES, get_model_provider
+from src.rag.models import FallbackLLMClient, HashEmbeddings, LLM_PROVIDER_FAILURES, get_model_provider
 
 
 class FakeEmbeddings:
@@ -44,6 +44,14 @@ def test_model_provider_uses_configured_embedding_model(monkeypatch):
     embeddings = get_model_provider(settings).embeddings()
 
     assert embeddings.model_name == "custom-embedding-model"
+
+
+def test_model_provider_can_use_hash_embeddings():
+    embeddings = get_model_provider(RuntimeSettings(llm_provider="extractive", embedding_model="hash")).embeddings()
+
+    assert isinstance(embeddings, HashEmbeddings)
+    assert len(embeddings.embed_query("vendor evidence")) == 384
+    assert embeddings.embed_query("vendor evidence") == embeddings.embed_query("vendor evidence")
 
 
 def test_local_model_provider_returns_synthesis_llm():

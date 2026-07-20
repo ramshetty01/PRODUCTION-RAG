@@ -70,6 +70,23 @@ def test_vector_backend_defaults_to_chroma(tmp_path):
     assert reloaded.similarity_search("workflow", k=1)[0].metadata["chunk_id"] == "docs:p0:c0"
 
 
+def test_chroma_backend_uses_configured_embedding_settings(tmp_path, monkeypatch):
+    seen = []
+
+    def fake_create_embeddings(*, settings=None, **_kwargs):
+        seen.append(settings.embedding_model)
+        return FakeEmbeddings()
+
+    monkeypatch.setattr("src.rag.vector_store.create_embeddings", fake_create_embeddings)
+    settings = RuntimeSettings(vector_backend="chroma", embedding_model="hash")
+    chunks = [Document(page_content="Vendor evidence.", metadata={"chunk_id": "vendor:p0:c0"})]
+
+    build_vector_db(chunks, tmp_path / "chroma_db", settings=settings)
+    load_vector_db(tmp_path / "chroma_db", settings=settings)
+
+    assert seen == ["hash", "hash"]
+
+
 def test_qdrant_backend_uses_managed_adapter(monkeypatch):
     calls = {}
 

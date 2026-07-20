@@ -21,6 +21,8 @@ services:
         value: 10000
       - key: RAG_VECTOR_DB_PATH
         value: /var/data/production-rag/chroma_db
+      - key: RAG_EMBEDDING_MODEL
+        value: hash
       - key: RAG_MANIFEST_PATH
         value: /var/data/production-rag/ingestion_manifest.json
       - key: RAG_RETRIEVAL_MODE
