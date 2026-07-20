@@ -50,7 +50,7 @@ from src.rag.reranking import build_reranker
 from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode, select_retrieval_strategy
 from src.rag.runtime_quality import score_runtime_answer
 from src.rag.security import build_rate_limiter, run_upload_scan, sanitize_upload_filename, validate_path, validate_query
-from src.rag.storage import store_uploaded_file
+from src.rag.storage import delete_stored_file, store_uploaded_file
 from src.rag.usage import DEFAULT_USAGE_LOG, UsageEvent, append_usage, load_usage, usage_summary
 from src.rag.vector_store import build_vector_db, count_records, delete_records_by_metadata
 
@@ -1484,6 +1484,7 @@ def delete_document(
 
     source_path = _safe_api_path(record["source_path"])
     source_path.unlink(missing_ok=True)
+    delete_stored_file(record.get("storage_uri"), SETTINGS)
     del manifest["documents"][document_id]
     save_manifest(manifest, manifest_path)
     _clear_query_cache()

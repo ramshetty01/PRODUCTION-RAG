@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from src.rag.config import RuntimeSettings
 
@@ -33,3 +34,30 @@ def store_uploaded_file(path: str | Path, filename: str, workspace_id: str | Non
     client = boto3.client("s3", **client_kwargs)
     client.upload_file(str(path), settings.object_storage_bucket, key)
     return f"s3://{settings.object_storage_bucket}/{key}"
+
+
+def delete_stored_file(uri: str | None, settings: RuntimeSettings) -> bool:
+    if not uri:
+        return False
+    if not uri.startswith("s3://"):
+        path = Path(uri)
+        if path.exists():
+            path.unlink()
+            return True
+        return False
+
+    parsed = urlparse(uri)
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+    if not bucket or not key:
+        return False
+
+    import boto3
+
+    client_kwargs = {}
+    if settings.object_storage_endpoint:
+        client_kwargs["endpoint_url"] = settings.object_storage_endpoint
+    if settings.object_storage_region:
+        client_kwargs["region_name"] = settings.object_storage_region
+    boto3.client("s3", **client_kwargs).delete_object(Bucket=bucket, Key=key)
+    return True
