@@ -955,7 +955,7 @@ def test_document_management_lists_reindexes_and_deletes_documents(tmp_path, mon
     monkeypatch.setattr(routes, "build_vector_db", fake_build_vector_db)
     client = TestClient(routes.create_app())
 
-    listed = client.get("/documents", params={"workspace_id": "workspace-a"})
+    listed = client.get("/documents", headers={"X-API-Key": "admin-key"}, params={"workspace_id": "workspace-a"})
     blocked = client.post("/documents/policy/reindex", params={"workspace_id": "workspace-a"})
     status = client.get("/admin/status", headers={"X-API-Key": "admin-key"}, params={"workspace_id": "workspace-a"})
     renamed = client.patch(
