@@ -1309,6 +1309,8 @@ async def upload_document(
 ):
     safe_workspace_id = _tenant_scoped_workspace_id(workspace_id, auth_context)
     safe_access_roles = _safe_access_roles(access_roles)
+    if not RATE_LIMITER.allow(f"upload:{auth_context.cache_scope()}"):
+        raise HTTPException(status_code=429, detail="rate limit exceeded")
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in SUPPORTED_UPLOAD_SUFFIXES:
         raise HTTPException(
