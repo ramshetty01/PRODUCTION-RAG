@@ -531,6 +531,30 @@ def test_upload_endpoint_rejects_cross_tenant_workspace(tmp_path, monkeypatch):
     assert response.json()["detail"] == "workspace not found"
 
 
+def test_upload_rate_limit_key_is_scoped_by_tenant_and_subject(tmp_path, monkeypatch):
+    class RecordingLimiter:
+        keys = []
+
+        def allow(self, key):
+            self.keys.append(key)
+            return False
+
+    limiter = RecordingLimiter()
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "RATE_LIMITER", limiter)
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("tenant-a-key:public:tenant-a"))
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/upload",
+        headers={"X-API-Key": "tenant-a-key"},
+        files={"file": ("policy.md", b"# Policy", "text/markdown")},
+    )
+
+    assert response.status_code == 429
+    assert limiter.keys == ["upload:tenant-a:api-key:tenant:public"]
+
+
 def test_upload_endpoint_can_queue_background_ingestion(tmp_path, monkeypatch):
     routes.INGESTION_JOBS.clear()
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
