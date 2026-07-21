@@ -85,6 +85,21 @@ class HealthResponse(BaseModel):
     status: str
 
 
+class RuntimeConfigResponse(BaseModel):
+    environment: str
+    auth_mode: str
+    metadata_backend: str
+    vector_db_path: str
+    manifest_path: str
+    embedding_model: str
+    llm_provider: str
+    llm_model_set: bool
+    llm_api_key_set: bool
+    database_url_set: bool
+    supabase_url_set: bool
+    supabase_jwt_secret_set: bool
+
+
 class IngestRequest(BaseModel):
     pdf_path: str = Field(default=str(DEFAULT_PDF_PATH))
     persist_dir: str = Field(default=SETTINGS.vector_db_path)
@@ -1234,6 +1249,24 @@ def _answer_stream_chunks(answer: str):
 @router.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(status="ok")
+
+
+@router.get("/runtime/config", response_model=RuntimeConfigResponse, include_in_schema=False)
+def runtime_config():
+    return RuntimeConfigResponse(
+        environment=SETTINGS.environment,
+        auth_mode=SETTINGS.auth_mode,
+        metadata_backend=SETTINGS.metadata_backend,
+        vector_db_path=SETTINGS.vector_db_path,
+        manifest_path=SETTINGS.manifest_path,
+        embedding_model=SETTINGS.embedding_model,
+        llm_provider=SETTINGS.llm_provider,
+        llm_model_set=bool(SETTINGS.llm_model),
+        llm_api_key_set=bool(SETTINGS.llm_api_key),
+        database_url_set=bool(SETTINGS.database_url),
+        supabase_url_set=bool(SETTINGS.supabase_url),
+        supabase_jwt_secret_set=bool(SETTINGS.supabase_jwt_secret),
+    )
 
 
 @router.get("/account/me", response_model=AccountResponse)
