@@ -151,6 +151,36 @@ def test_health_endpoint_returns_status():
     assert response.headers["X-Request-ID"]
 
 
+def test_runtime_config_reports_safe_configuration_flags(monkeypatch):
+    monkeypatch.setattr(
+        routes,
+        "SETTINGS",
+        RuntimeSettings(
+            auth_mode="supabase",
+            metadata_backend="postgres",
+            database_url="postgresql://user:secret@example/db",
+            supabase_url="https://example.supabase.co",
+            supabase_jwt_secret="jwt-secret",
+            llm_provider="openrouter",
+            llm_model="model",
+            llm_api_key="secret",
+        ),
+    )
+    client = TestClient(routes.create_app())
+
+    response = client.get("/runtime/config")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["auth_mode"] == "supabase"
+    assert body["metadata_backend"] == "postgres"
+    assert body["llm_provider"] == "openrouter"
+    assert body["database_url_set"] is True
+    assert body["supabase_jwt_secret_set"] is True
+    assert "jwt-secret" not in response.text
+    assert "postgresql://user:secret@example/db" not in response.text
+
+
 def test_safe_api_path_allows_configured_absolute_runtime_paths(tmp_path, monkeypatch):
     runtime = tmp_path / "var" / "data" / "production-rag"
     monkeypatch.setattr(
