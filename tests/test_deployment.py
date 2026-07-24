@@ -184,9 +184,12 @@ def test_public_deployment_docs_include_smoke_test_and_rollback():
     assert "deploy/render.yaml" in docs
     assert "https://production-rag-demo.onrender.com" in docs
     assert "python scripts/smoke_deploy.py" in docs
+    assert '--api-key "$RAG_ADMIN_API_KEY"' in docs
     assert "Rollback" in docs
     assert "/health" in smoke
     assert "/demo" in smoke
     assert "/metrics" in smoke
     assert "/query" in smoke
+    assert "X-API-Key" in smoke
     assert "Render Public Demo" in deploy_readme
+    assert '--api-key "$RAG_ADMIN_API_KEY"' in deploy_readme

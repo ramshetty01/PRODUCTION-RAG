@@ -55,7 +55,7 @@ https://production-rag-demo.onrender.com
 Verify the deployed service:
 
 ```bash
-python scripts/smoke_deploy.py https://production-rag-demo.onrender.com
+python scripts/smoke_deploy.py https://production-rag-demo.onrender.com --api-key "$RAG_ADMIN_API_KEY"
 ```
 
 The smoke test checks `/health`, `/demo`, `/metrics`, and `/query`. Roll back

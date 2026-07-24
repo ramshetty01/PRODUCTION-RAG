@@ -58,8 +58,8 @@ the deployment platform or secret manager, not in committed env files. See
 Run smoke tests against each environment after deploy:
 
 ```bash
-python scripts/smoke_deploy.py https://staging-rag.example.com
-python scripts/smoke_deploy.py https://production-rag.example.com
+python scripts/smoke_deploy.py https://staging-rag.example.com --api-key "$RAG_ADMIN_API_KEY"
+python scripts/smoke_deploy.py https://production-rag.example.com --api-key "$RAG_ADMIN_API_KEY"
 ```
 
 Background ingestion jobs are persisted to `logs/ingestion_jobs.json` in the
@@ -141,7 +141,7 @@ Secrets must be configured in the hosting provider, not committed to git.
 After deployment, run the smoke test:
 
 ```bash
-python scripts/smoke_deploy.py https://production-rag-demo.onrender.com
+python scripts/smoke_deploy.py https://production-rag-demo.onrender.com --api-key "$RAG_ADMIN_API_KEY"
 ```
 
 Rollback by selecting the previous successful deploy in Render, or by reverting
