@@ -220,6 +220,14 @@ def test_load_settings_reads_dotenv_file(tmp_path, monkeypatch):
     assert settings.observability_export_api_key == "obs-key"
 
 
+def test_default_dotenv_path_can_be_overridden_for_tests(tmp_path, monkeypatch):
+    dotenv = tmp_path / "ignored.env"
+    dotenv.write_text("RAG_AUTH_MODE=supabase\nRAG_SUPABASE_JWT_SECRET=secret\n", encoding="utf-8")
+    monkeypatch.setenv("RAG_DOTENV_PATH", str(dotenv))
+
+    assert load_settings().auth_mode == "supabase"
+
+
 def test_render_uses_hash_when_old_default_embedding_is_configured(tmp_path, monkeypatch):
     monkeypatch.setenv("RENDER", "true")
     monkeypatch.delenv("RAG_EMBEDDING_MODEL", raising=False)
