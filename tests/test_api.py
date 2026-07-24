@@ -2499,6 +2499,26 @@ def test_feedback_endpoint_allows_client_path_in_local_mode(tmp_path, monkeypatc
     assert "req-local" in feedback_path.read_text(encoding="utf-8")
 
 
+def test_feedback_endpoint_requires_auth_in_production(tmp_path, monkeypatch):
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="production", auth_mode="api_key", api_keys="tenant-key:public:tenant-a"))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("tenant-key:public:tenant-a"))
+    client = TestClient(routes.create_app())
+    payload = {
+        "request_id": "req-prod",
+        "query": "q",
+        "answer": "a",
+        "helpful": True,
+    }
+
+    blocked = client.post("/feedback", json=payload)
+    allowed = client.post("/feedback", headers={"X-API-Key": "tenant-key"}, json=payload)
+
+    assert blocked.status_code == 401
+    assert allowed.status_code == 200
+    assert allowed.json() == {"status": "recorded", "request_id": "req-prod"}
+
+
 def test_feedback_and_monitoring_endpoints(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
