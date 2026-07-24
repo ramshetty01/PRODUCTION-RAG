@@ -1925,7 +1925,12 @@ def _alert_metric_lines() -> list[str]:
 
 
 @router.get("/metrics")
-def metrics():
+def metrics(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    if SETTINGS.environment == "production":
+        _require_global_admin(_auth_context(x_api_key=x_api_key, authorization=authorization))
     METRICS.record_provider_failures(LLM_PROVIDER_FAILURES)
     payload = METRICS.to_prometheus() + "\n".join(_alert_metric_lines()) + "\n"
     return Response(payload, media_type="text/plain; version=0.0.4")
