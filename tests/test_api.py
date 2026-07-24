@@ -2439,6 +2439,52 @@ def test_feedback_endpoint_rejects_path_traversal():
     assert "outside allowed root" in response.json()["detail"]
 
 
+def test_feedback_endpoint_ignores_client_path_in_production(tmp_path, monkeypatch):
+    client_path = tmp_path / "client-feedback.jsonl"
+    default_path = tmp_path / "logs" / "feedback.jsonl"
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="production"))
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/feedback",
+        json={
+            "request_id": "req-1",
+            "query": "q",
+            "answer": "a",
+            "helpful": True,
+            "feedback_path": str(client_path),
+        },
+    )
+
+    assert response.status_code == 200
+    assert not client_path.exists()
+    assert default_path.exists()
+    assert "req-1" in default_path.read_text(encoding="utf-8")
+
+
+def test_feedback_endpoint_allows_client_path_in_local_mode(tmp_path, monkeypatch):
+    feedback_path = tmp_path / "local-feedback.jsonl"
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="local"))
+    client = TestClient(routes.create_app())
+
+    response = client.post(
+        "/feedback",
+        json={
+            "request_id": "req-local",
+            "query": "q",
+            "answer": "a",
+            "helpful": True,
+            "feedback_path": str(feedback_path),
+        },
+    )
+
+    assert response.status_code == 200
+    assert feedback_path.exists()
+    assert "req-local" in feedback_path.read_text(encoding="utf-8")
+
+
 def test_feedback_and_monitoring_endpoints(tmp_path, monkeypatch):
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
