@@ -1252,7 +1252,7 @@ def health():
 
 
 @router.get("/runtime/config", response_model=RuntimeConfigResponse, include_in_schema=False)
-def runtime_config():
+def runtime_config(auth_context: AuthContext = Depends(_admin_context)):
     return RuntimeConfigResponse(
         environment=SETTINGS.environment,
         auth_mode=SETTINGS.auth_mode,
@@ -1365,9 +1365,16 @@ def demo_admin_app():
 
 
 @router.get("/sources/open", include_in_schema=False)
-def open_source(path: str):
+def open_source(path: str, auth_context: AuthContext = Depends(_auth_context)):
     source_path = _safe_api_path(path)
     if not source_path.exists() or not source_path.is_file():
+        raise HTTPException(status_code=404, detail="source file not found")
+    allowed_paths = {
+        _safe_api_path(record["source_path"])
+        for record in _document_records(_tenant_scoped_workspace_id(None, auth_context))
+        if record.get("source_path")
+    }
+    if source_path not in allowed_paths:
         raise HTTPException(status_code=404, detail="source file not found")
     return FileResponse(source_path)
 

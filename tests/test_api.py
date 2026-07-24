@@ -166,10 +166,14 @@ def test_runtime_config_reports_safe_configuration_flags(monkeypatch):
             llm_api_key="secret",
         ),
     )
+    token = sign_jwt({"sub": "admin", "roles": ["public", "admin"], "exp": 2_000_000_000}, "jwt-secret")
+    monkeypatch.setattr(routes, "_metadata_store", lambda: FakeMetadataStore())
     client = TestClient(routes.create_app())
 
-    response = client.get("/runtime/config")
+    blocked = client.get("/runtime/config")
+    response = client.get("/runtime/config", headers={"Authorization": f"Bearer {token}"})
 
+    assert blocked.status_code == 401
     assert response.status_code == 200
     body = response.json()
     assert body["auth_mode"] == "supabase"
@@ -476,15 +480,41 @@ def test_usage_endpoint_aggregates_by_workspace_and_requires_admin(tmp_path, mon
 
 def test_source_open_endpoint_serves_safe_files(tmp_path, monkeypatch):
     source = tmp_path / "data" / "uploads" / "sample.txt"
+    unindexed = tmp_path / "data" / "uploads" / "unindexed.txt"
     source.parent.mkdir(parents=True)
     source.write_text("source passage", encoding="utf-8")
+    unindexed.write_text("do not serve", encoding="utf-8")
+    manifest_path = tmp_path / "data" / "processed" / "ingestion_manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "documents": {
+                    "sample": {
+                        "document_id": "sample",
+                        "document_version": "v1",
+                        "source_path": str(source),
+                        "status": "indexed",
+                        "workspace_id": "workspace-a",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(manifest_path=str(manifest_path)))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("tenant-key:public:workspace-a"))
     client = TestClient(routes.create_app())
 
-    response = client.get("/sources/open", params={"path": str(source)})
+    blocked = client.get("/sources/open", params={"path": str(source)})
+    response = client.get("/sources/open", headers={"X-API-Key": "tenant-key"}, params={"path": str(source)})
+    unindexed_response = client.get("/sources/open", headers={"X-API-Key": "tenant-key"}, params={"path": str(unindexed)})
 
+    assert blocked.status_code == 401
     assert response.status_code == 200
     assert response.text == "source passage"
+    assert unindexed_response.status_code == 404
 
 
 def test_audit_endpoint_exports_json_and_csv(tmp_path, monkeypatch):
