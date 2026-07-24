@@ -433,6 +433,12 @@ def _safe_api_path(path: str | Path) -> Path:
     raise HTTPException(status_code=400, detail=f"path is outside allowed roots: {path}")
 
 
+def _feedback_write_path(requested_path: str | Path) -> Path:
+    if SETTINGS.environment == "production":
+        return _safe_api_path(DEFAULT_FEEDBACK_LOG)
+    return _safe_api_path(requested_path)
+
+
 def _candidate_documents(vectorstore, query: str, top_k: int):
     return vectorstore.similarity_search(query, k=max(top_k * 4, top_k))
 
@@ -1822,7 +1828,7 @@ def feedback(request: FeedbackRequest):
         latency_ms=request.latency_ms,
         note=request.note,
     )
-    append_feedback(event, _safe_api_path(request.feedback_path))
+    append_feedback(event, _feedback_write_path(request.feedback_path))
     return FeedbackResponse(status="recorded", request_id=request.request_id)
 
 
