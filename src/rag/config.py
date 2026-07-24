@@ -162,6 +162,8 @@ def _require_module(module: str, message: str) -> None:
 
 
 def load_settings(dotenv_path: str | Path | None = ".env") -> RuntimeSettings:
+    if str(dotenv_path) == ".env":
+        dotenv_path = os.getenv("RAG_DOTENV_PATH", ".env")
     dotenv_values = load_dotenv(dotenv_path) if dotenv_path else {}
     secrets_file = os.getenv("RAG_SECRETS_FILE") or dotenv_values.get("RAG_SECRETS_FILE") or ""
     dotenv_values = {**dotenv_values, **load_secrets_file(secrets_file)}
