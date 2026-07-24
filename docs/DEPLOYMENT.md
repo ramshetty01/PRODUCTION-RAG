@@ -127,8 +127,10 @@ Required reviewer endpoints:
 ```bash
 curl https://production-rag-demo.onrender.com/health
 curl https://production-rag-demo.onrender.com/demo
-curl https://production-rag-demo.onrender.com/metrics
+curl https://production-rag-demo.onrender.com/metrics \
+  -H "X-API-Key: $RAG_ADMIN_API_KEY"
 curl -X POST https://production-rag-demo.onrender.com/query \
+  -H "X-API-Key: $RAG_ADMIN_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"query":"What evidence is required before vendor onboarding?","retrieval_mode":"hybrid","top_k":4}'
 ```
