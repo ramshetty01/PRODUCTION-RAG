@@ -1818,7 +1818,13 @@ def query_stream(request: QueryRequest, auth_context: AuthContext = Depends(_aut
 
 
 @router.post("/feedback", response_model=FeedbackResponse)
-def feedback(request: FeedbackRequest):
+def feedback(
+    request: FeedbackRequest,
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    if SETTINGS.environment == "production":
+        _auth_context(x_api_key=x_api_key, authorization=authorization)
     event = FeedbackEvent(
         request_id=request.request_id,
         query=request.query,
