@@ -580,7 +580,8 @@ def test_audit_endpoint_exports_json_and_csv(tmp_path, monkeypatch):
     assert blocked.status_code == 401
 
 
-def test_evaluation_endpoint_returns_dashboard_metrics():
+def test_evaluation_endpoint_returns_dashboard_metrics(monkeypatch):
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="local"))
     client = TestClient(routes.create_app())
 
     response = client.get("/evaluation")
@@ -592,6 +593,19 @@ def test_evaluation_endpoint_returns_dashboard_metrics():
     assert body["metrics"]["citation_coverage"] == 1.0
     assert body["metrics"]["refusal_accuracy"] == 1.0
     assert body["dataset"]["total_cases"] >= 66
+
+
+def test_evaluation_endpoint_requires_admin_in_production(monkeypatch):
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="production", auth_mode="api_key", api_keys="admin-key:public|admin"))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    client = TestClient(routes.create_app())
+
+    blocked = client.get("/evaluation")
+    allowed = client.get("/evaluation", headers={"X-API-Key": "admin-key"})
+
+    assert blocked.status_code == 401
+    assert allowed.status_code == 200
+    assert allowed.json()["quality_gate"]["passed"] is True
 
 
 def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch):
