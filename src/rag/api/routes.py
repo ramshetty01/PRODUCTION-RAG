@@ -1838,7 +1838,13 @@ def feedback_events(
 
 
 @router.get("/monitoring", response_model=MonitoringResponse)
-def monitoring(feedback_path: str = str(DEFAULT_FEEDBACK_LOG)):
+def monitoring(
+    feedback_path: str = str(DEFAULT_FEEDBACK_LOG),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    if SETTINGS.environment == "production":
+        _require_global_admin(_auth_context(x_api_key=x_api_key, authorization=authorization))
     return MonitoringResponse(metrics=monitoring_metrics(load_feedback(_safe_api_path(feedback_path))))
 
 
