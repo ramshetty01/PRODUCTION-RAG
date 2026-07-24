@@ -2433,6 +2433,29 @@ def test_feedback_and_monitoring_endpoints(tmp_path, monkeypatch):
     assert "request_id" in export.text
 
 
+def test_metrics_endpoint_requires_admin_in_production(monkeypatch):
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="production", auth_mode="api_key", api_keys="admin-key:public|admin"))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    client = TestClient(routes.create_app())
+
+    blocked = client.get("/metrics")
+    allowed = client.get("/metrics", headers={"X-API-Key": "admin-key"})
+
+    assert blocked.status_code == 401
+    assert allowed.status_code == 200
+    assert "rag_api_requests_total" in allowed.text
+
+
+def test_metrics_endpoint_stays_public_in_local_mode(monkeypatch):
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="local"))
+    client = TestClient(routes.create_app())
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "rag_api_requests_total" in response.text
+
+
 def test_observability_dashboard_aggregates_operator_metrics(tmp_path, monkeypatch):
     now = datetime.now(UTC).isoformat()
     logs = tmp_path / "logs"
