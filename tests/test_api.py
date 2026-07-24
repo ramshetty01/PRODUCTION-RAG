@@ -2456,6 +2456,35 @@ def test_metrics_endpoint_stays_public_in_local_mode(monkeypatch):
     assert "rag_api_requests_total" in response.text
 
 
+def test_monitoring_endpoint_requires_admin_in_production(tmp_path, monkeypatch):
+    feedback_path = tmp_path / "feedback.jsonl"
+    feedback_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="production", auth_mode="api_key", api_keys="admin-key:public|admin"))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    client = TestClient(routes.create_app())
+
+    blocked = client.get("/monitoring", params={"feedback_path": str(feedback_path)})
+    allowed = client.get("/monitoring", headers={"X-API-Key": "admin-key"}, params={"feedback_path": str(feedback_path)})
+
+    assert blocked.status_code == 401
+    assert allowed.status_code == 200
+    assert "helpful_rate" in allowed.json()["metrics"]
+
+
+def test_monitoring_endpoint_stays_public_in_local_mode(tmp_path, monkeypatch):
+    feedback_path = tmp_path / "feedback.jsonl"
+    feedback_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="local"))
+    client = TestClient(routes.create_app())
+
+    response = client.get("/monitoring", params={"feedback_path": str(feedback_path)})
+
+    assert response.status_code == 200
+    assert "helpful_rate" in response.json()["metrics"]
+
+
 def test_observability_dashboard_aggregates_operator_metrics(tmp_path, monkeypatch):
     now = datetime.now(UTC).isoformat()
     logs = tmp_path / "logs"
