@@ -1900,7 +1900,12 @@ def audit_log(
 
 
 @router.get("/evaluation", response_model=EvaluationResponse)
-def evaluation_report():
+def evaluation_report(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    if SETTINGS.environment == "production":
+        _require_global_admin(_auth_context(x_api_key=x_api_key, authorization=authorization))
     return EvaluationResponse(**build_evaluation_report())
 
 
