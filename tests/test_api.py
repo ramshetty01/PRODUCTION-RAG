@@ -229,6 +229,47 @@ def test_llm_health_endpoint_returns_provider_status(monkeypatch):
     }
 
 
+def test_llm_health_endpoint_requires_admin_in_production(monkeypatch):
+    class FakeLLM:
+        def health_check(self):
+            return {"status": "ok", "provider": "fake", "model": "test-model"}
+
+    class FakeProvider:
+        def llm(self):
+            return FakeLLM()
+
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="production", auth_mode="api_key", api_keys="admin-key:public|admin"))
+    monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
+    monkeypatch.setattr(routes, "get_model_provider", lambda settings: FakeProvider())
+    client = TestClient(routes.create_app())
+
+    blocked = client.get("/llm/health")
+    allowed = client.get("/llm/health", headers={"X-API-Key": "admin-key"})
+
+    assert blocked.status_code == 401
+    assert allowed.status_code == 200
+    assert allowed.json()["status"] == "ok"
+
+
+def test_llm_health_endpoint_stays_public_in_local_mode(monkeypatch):
+    class FakeLLM:
+        def health_check(self):
+            return {"status": "ok", "provider": "fake", "model": "test-model"}
+
+    class FakeProvider:
+        def llm(self):
+            return FakeLLM()
+
+    monkeypatch.setattr(routes, "SETTINGS", RuntimeSettings(environment="local"))
+    monkeypatch.setattr(routes, "get_model_provider", lambda settings: FakeProvider())
+    client = TestClient(routes.create_app())
+
+    response = client.get("/llm/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
 def test_demo_frontend_assets_are_served():
     client = TestClient(routes.create_app())
 

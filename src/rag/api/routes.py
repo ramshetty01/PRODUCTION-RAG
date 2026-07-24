@@ -1282,7 +1282,12 @@ def account_me(auth_context: AuthContext = Depends(_auth_context)):
 
 
 @router.get("/llm/health", response_model=LLMHealthResponse)
-def llm_health():
+def llm_health(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    if SETTINGS.environment == "production":
+        _require_global_admin(_auth_context(x_api_key=x_api_key, authorization=authorization))
     try:
         result = get_model_provider(SETTINGS).llm().health_check()
     except Exception as exc:
