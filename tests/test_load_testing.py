@@ -53,6 +53,10 @@ def test_run_load_test_exercises_health_metrics_and_query():
     assert any("/index-status?workspace_id=load-test" in call[0] for call in calls)
     assert any(call[0].endswith("/query/stream") for call in calls)
     query_calls = [call for call in calls if call[0].endswith("/query")]
+    metric_calls = [call for call in calls if call[0].endswith("/metrics")]
+    health_calls = [call for call in calls if call[0].endswith("/health")]
+    assert metric_calls[0][2] == {"X-API-Key": "public-key"}
+    assert health_calls[0][2] is None
     assert query_calls[0][1]["retrieval_mode"] == "hybrid"
     assert query_calls[0][1]["workspace_id"] == "load-test"
     assert query_calls[0][2] == {"X-API-Key": "public-key"}

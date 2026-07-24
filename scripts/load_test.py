@@ -159,7 +159,7 @@ def run_load_test(
     query_payload = {"query": query, "workspace_id": workspace_id, "retrieval_mode": "hybrid", "top_k": 4}
     for _ in range(requests_per_endpoint):
         work.append((f"{base_url}/health", None, None))
-        work.append((f"{base_url}/metrics", None, None))
+        work.append((f"{base_url}/metrics", None, headers))
         work.append((f"{base_url}/upload", small_upload, headers))
         work.append((f"{base_url}/index-status?workspace_id={workspace_id}", None, headers))
         work.append((f"{base_url}/query", query_payload, headers))
