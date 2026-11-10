@@ -31,7 +31,7 @@ def citation_for_chunk(chunk) -> dict:
     citation_id = citation_id_for_chunk(chunk)
     source = str(chunk.metadata.get("source", ""))
     page = chunk.metadata.get("page")
-    source_name = _source_name(source)
+    source_name = str(chunk.metadata.get("filename") or _source_name(source))
     page_label = f"page {page}" if page is not None else "page unknown"
     source_url = f"/sources/open?path={quote(source)}" if source else ""
     if source.lower().endswith(".pdf") and page is not None:

@@ -643,7 +643,8 @@ def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch
     assert response.status_code == 200
     body = response.json()
     assert body["filename"] == "policy.md"
-    assert body["document_id"] == "policy"
+    assert body["document_id"] == Path(body["saved_path"]).stem
+    assert body["document_id"].endswith("--policy")
     assert body["document_version"] == "v1"
     assert body["workspace_id"] == "workspace-a"
     assert body["access_roles"] == ["admin", "finance"]
@@ -684,7 +685,7 @@ def test_upload_endpoint_returns_managed_storage_uri(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["storage_uri"] == "s3://rag-documents/workspace-a/policy.md"
     manifest = json.loads((tmp_path / "data" / "processed" / "ingestion_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["documents"]["policy"]["storage_uri"] == "s3://rag-documents/workspace-a/policy.md"
+    assert manifest["documents"][response.json()["document_id"]]["storage_uri"] == "s3://rag-documents/workspace-a/policy.md"
 
 
 def test_upload_endpoint_rejects_cross_tenant_workspace(tmp_path, monkeypatch):
@@ -1006,7 +1007,8 @@ def test_upload_endpoint_sanitizes_names_limits_size_and_runs_scanner(tmp_path, 
     assert oversized.status_code == 413
     assert safe.status_code == 200
     assert safe.json()["filename"] == "unsafe_name.md"
-    assert (tmp_path / "data" / "uploads" / "unsafe_name.md").exists()
+    assert Path(safe.json()["saved_path"]).exists()
+    assert Path(safe.json()["saved_path"]).name.endswith("--unsafe_name.md")
     assert not (tmp_path / "data" / "quarantine" / "unsafe_name.md").exists()
 
 
