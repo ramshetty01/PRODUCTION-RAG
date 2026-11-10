@@ -18,13 +18,18 @@ IDENTIFIER_PATTERN = re.compile(r"\b[A-Z]{2,}[-_]\d+|\b[a-z]+[-_][a-z0-9_-]+\b|\
 KEYWORD_LOOKUP_TERMS = {"id", "policy", "control", "owner", "date", "row", "table", "evidence"}
 
 
-def user_can_access(chunk, user_roles: set[str] | None = None) -> bool:
-    allowed_roles = chunk.metadata.get("access_roles") or ["public"]
+def metadata_access_allowed(metadata: dict, user_roles: set[str] | None = None) -> bool:
+    """Shared document/chunk role policy for retrieval and original-source downloads."""
+    allowed_roles = metadata.get("access_roles") or ["public"]
     if isinstance(allowed_roles, str):
         allowed_roles = [allowed_roles]
     allowed_roles = set(allowed_roles)
     user_roles = user_roles or {"public"}
     return "public" in allowed_roles or bool(allowed_roles & user_roles)
+
+
+def user_can_access(chunk, user_roles: set[str] | None = None) -> bool:
+    return metadata_access_allowed(chunk.metadata, user_roles)
 
 
 def metadata_matches(chunk, filters: dict | None = None) -> bool:
