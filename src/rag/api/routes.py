@@ -895,6 +895,7 @@ def _index_uploaded_file(
             chunk.metadata["workspace_id"] = safe_workspace_id
     for chunk in chunks:
         chunk.metadata["access_roles"] = safe_access_roles
+        chunk.metadata["filename"] = safe_name
     if job_id:
         _set_ingestion_job(job_id, status="embedding", progress=75)
     vectorstore = build_vector_db(chunks, persist_directory=persist_dir, settings=SETTINGS)
@@ -1491,9 +1492,12 @@ async def upload_document(
     quarantine_dir = _safe_api_path(PROJECT_ROOT / "data" / "quarantine")
     upload_dir.mkdir(parents=True, exist_ok=True)
     quarantine_dir.mkdir(parents=True, exist_ok=True)
-    saved_path = upload_dir / safe_name
+    # A source object is immutable across upload requests. Preserve the display name
+    # separately while assigning a unique stem for paths, manifest IDs and chunks.
+    stored_name = f"{new_request_id()}--{safe_name}"
+    saved_path = upload_dir / stored_name
     saved_path = _safe_api_path(saved_path)
-    quarantine_path = _safe_api_path(quarantine_dir / safe_name)
+    quarantine_path = _safe_api_path(quarantine_dir / stored_name)
 
     content = await file.read()
     if not content:
@@ -1524,7 +1528,7 @@ async def upload_document(
             ),
         ) from exc
     shutil.move(str(quarantine_path), saved_path)
-    storage_uri = store_uploaded_file(saved_path, safe_name, safe_workspace_id, SETTINGS)
+    storage_uri = store_uploaded_file(saved_path, stored_name, safe_workspace_id, SETTINGS)
 
     try:
         if background:
@@ -1550,7 +1554,7 @@ async def upload_document(
                 filename=safe_name,
                 saved_path=str(saved_path),
                 storage_uri=storage_uri,
-                document_id=Path(safe_name).stem,
+                document_id=saved_path.stem,
                 document_version="pending",
                 workspace_id=safe_workspace_id or "default",
                 access_roles=safe_access_roles,
@@ -1770,6 +1774,7 @@ def reindex_document(
             chunk.metadata["workspace_id"] = workspace
     for chunk in chunks:
         chunk.metadata["access_roles"] = access_roles
+        chunk.metadata["filename"] = record.get("filename") or source_path.name
 
     vectorstore = build_vector_db(
         chunks,

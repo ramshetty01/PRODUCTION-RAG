@@ -96,6 +96,10 @@ The demo supports dev-public, API-key, and bearer-token auth modes. Query and
 upload requests attach the selected credential, and the browser stores only the
 selected auth mode in local storage while keeping the credential in session
 storage.
+Each upload receives an independent opaque document identity and storage key.
+Reusing a filename creates a new document rather than replacing another upload;
+use the explicit document reindex endpoint to refresh an existing document. The
+original sanitized filename is preserved for display.
 Uploaded documents are tagged with `access_roles` metadata. Public uploads use
 `public`; admin-key uploads use `admin`; retrieval filters chunks against the
 authenticated roles on every query.
