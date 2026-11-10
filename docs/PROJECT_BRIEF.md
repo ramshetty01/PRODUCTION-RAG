@@ -63,7 +63,7 @@ Legacy prefix-based identities are not reused after upgrade.
   generation: upload → query → cited answer → source download passed. This is not neural
   model accuracy evidence. No paid provider calls were used in this maintenance run.
 
-PRs are stacked and unmerged; confirm GitHub state before claiming a fix is on main.
+PRs #306–309 are merged into main. PR #312 contains the evaluation correction; consult its GitHub status for merge evidence. These fixes do not establish public production readiness.
 After the evaluation correction, 276 tests pass. The fixture-validation CLI and the required-quality-gate failure path are tested without provider calls. The optional Ragas judge was not live-tested.
 
 ## Evaluation limitations

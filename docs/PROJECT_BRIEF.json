@@ -1,7 +1,7 @@
 {
   "project": "PRODUCTION-RAG",
   "repository": "https://github.com/ramshetty01/PRODUCTION-RAG",
-  "status": "Local application under hardening; stacked PRs unmerged; not validated public production",
+  "status": "Local application under hardening; PRs 306\u2013309 merged, evaluation correction tracked in PR312; not validated public production",
   "purpose": "Ingest documents, retrieve role/workspace-filtered evidence and return cited answers.",
   "stack": [
     "Python 3.11+",
@@ -80,5 +80,11 @@
     "Hardened FastAPI/Chroma ingestion and source-download authorization across role/workspace boundaries.",
     "Added API-key prefix-collision and conversation-isolation regressions using opaque complete-key fingerprints.",
     "Removed reference-answer evaluation leakage and made missing semantic evidence explicit."
+  ],
+  "merged_pull_requests": [
+    306,
+    307,
+    308,
+    309
   ]
 }
