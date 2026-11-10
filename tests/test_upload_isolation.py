@@ -10,6 +10,11 @@ from src.rag.config import RuntimeSettings
 
 
 def configure(tmp_path, monkeypatch):
+    from src.rag.conversation import ConversationMemoryStore
+    from src.rag.performance import QueryCache
+
+    monkeypatch.setattr(routes, "CONVERSATION_MEMORY", ConversationMemoryStore())
+    monkeypatch.setattr(routes, "QUERY_CACHE", QueryCache())
     manifest = tmp_path / "manifest.json"
     monkeypatch.setattr(routes, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(

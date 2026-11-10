@@ -29,3 +29,17 @@ RAG_SECRETS_FILE=/run/secrets/production-rag.env
 
 The app loads local `.env`, then the mounted secrets file, then real environment
 variables. Real environment variables win.
+
+## Configured API-key identity migration
+
+Configured API keys now receive an opaque subject derived from SHA-256 of the entire
+key, rather than its first six characters. Distinct keys with a common prefix no
+longer share conversation/cache/quota identities, and trace subjects do not reveal
+credential prefixes. This is an identifier, not password hashing or key encryption;
+production keys must still be high-entropy secrets.
+
+Existing process-local caches and conversations under old subjects are not reused.
+Historical usage/audit rows retain their original subjects; there is no reliable way
+to split old same-prefix records between principals. Operator quota/reporting systems
+must account for this identity cutover. Database-managed key UUID identities are
+unchanged. Do not manually relabel old records as belonging to one user without evidence.

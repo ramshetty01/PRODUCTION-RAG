@@ -725,7 +725,7 @@ def test_upload_rate_limit_key_is_scoped_by_tenant_and_subject(tmp_path, monkeyp
     )
 
     assert response.status_code == 429
-    assert limiter.keys == ["upload:tenant-a:api-key:tenant:public"]
+    assert limiter.keys == [f"upload:tenant-a:api-key:{hash_api_key('tenant-a-key')}:public"]
 
 
 def test_upload_endpoint_can_queue_background_ingestion(tmp_path, monkeypatch):
@@ -2253,7 +2253,7 @@ def test_query_rate_limit_key_is_scoped_by_tenant_and_subject(monkeypatch):
     assert client.post("/query", headers={"X-API-Key": "tenant-a-key"}, json={"query": "runner"}).status_code == 200
     assert client.post("/query", headers={"X-API-Key": "tenant-b-key"}, json={"query": "runner"}).status_code == 200
 
-    assert limiter.keys == ["tenant-a:api-key:tenant:public", "tenant-b:api-key:tenant:public"]
+    assert limiter.keys == [f"tenant-a:api-key:{hash_api_key('tenant-a-key')}:public", f"tenant-b:api-key:{hash_api_key('tenant-b-key')}:public"]
 
 
 def test_query_endpoint_rejects_missing_and_invalid_api_key_when_configured(monkeypatch):
