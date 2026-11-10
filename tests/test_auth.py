@@ -1,6 +1,12 @@
 import pytest
 
-from src.rag.auth import authenticate_jwt, authenticate_request, parse_api_keys, sign_jwt
+from src.rag.auth import (
+    authenticate_jwt,
+    authenticate_request,
+    hash_api_key,
+    parse_api_keys,
+    sign_jwt,
+)
 
 
 def test_parse_api_keys_derives_roles_and_tenant():
@@ -9,7 +15,10 @@ def test_parse_api_keys_derives_roles_and_tenant():
     assert contexts["public-key"].roles == {"public"}
     assert contexts["admin-key"].roles == {"public", "admin"}
     assert contexts["admin-key"].tenant_id == "tenant-a"
-    assert contexts["admin-key"].cache_scope() == "tenant-a:api-key:admin-:admin|public"
+    assert (
+        contexts["admin-key"].cache_scope()
+        == f"tenant-a:api-key:{hash_api_key('admin-key')}:admin|public"
+    )
 
 
 def test_authenticate_api_key_uses_dev_public_when_unconfigured():
@@ -41,7 +50,13 @@ def test_authenticate_jwt_derives_subject_roles_and_tenant():
         "secret",
     )
 
-    context = authenticate_jwt(f"Bearer {token}", "secret", issuer="issuer", audience="rag-api", now=1_700_000_000)
+    context = authenticate_jwt(
+        f"Bearer {token}",
+        "secret",
+        issuer="issuer",
+        audience="rag-api",
+        now=1_700_000_000,
+    )
 
     assert context.subject == "jwt:user-1"
     assert context.roles == {"public", "admin"}
@@ -53,7 +68,10 @@ def test_authenticate_jwt_derives_supabase_metadata():
         {
             "sub": "user-1",
             "email": "ram@example.com",
-            "app_metadata": {"roles": ["public", "org-admin"], "organization_id": "workspace-a"},
+            "app_metadata": {
+                "roles": ["public", "org-admin"],
+                "organization_id": "workspace-a",
+            },
             "user_metadata": {"name": "Ram"},
             "exp": 2_000_000_000,
         },
@@ -77,3 +95,40 @@ def test_authenticate_jwt_rejects_invalid_signature_and_expired_token():
         authenticate_jwt(f"Bearer {valid}", "wrong-secret", now=1_700_000_000)
     with pytest.raises(PermissionError, match="expired bearer token"):
         authenticate_jwt(f"Bearer {expired}", "secret", now=1_700_000_000)
+
+
+def test_equal_key_prefixes_have_distinct_stable_private_subjects():
+    contexts = parse_api_keys(
+        "shared-prefix-first:public:tenant-a,shared-prefix-second:public:tenant-a"
+    )
+    first, second = contexts.values()
+    assert first.subject != second.subject
+    assert first.cache_scope() != second.cache_scope()
+    assert "shared" not in first.subject + second.subject
+    assert len(first.subject.removeprefix("api-key:")) == 64
+    assert (
+        parse_api_keys("shared-prefix-first:public:tenant-a")[
+            "shared-prefix-first"
+        ].subject
+        == first.subject
+    )
+
+
+def test_same_prefix_keys_cannot_read_each_others_conversation():
+    from src.rag.conversation import ConversationMemoryStore, ConversationTurn
+
+    contexts = parse_api_keys(
+        "shared-prefix-first:public:tenant-a,shared-prefix-second:public:tenant-a"
+    )
+    first, second = contexts.values()
+    memory = ConversationMemoryStore()
+    memory.append(
+        "session",
+        "tenant-a",
+        first.cache_scope(),
+        ConversationTurn(
+            user="Private question", assistant="Private answer", citations=[]
+        ),
+    )
+    assert len(memory.get("session", "tenant-a", first.cache_scope())) == 1
+    assert memory.get("session", "tenant-a", second.cache_scope()) == []

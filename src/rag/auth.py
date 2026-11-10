@@ -35,7 +35,7 @@ def parse_api_keys(raw: str) -> dict[str, AuthContext]:
         roles = {role.strip() for role in roles_raw.split("|") if role.strip()}
         if not roles:
             raise ValueError("API key role list cannot be empty")
-        contexts[key] = AuthContext(subject=f"api-key:{key[:6]}", roles=roles, tenant_id=tenant_id)
+        contexts[key] = AuthContext(subject=f"api-key:{hash_api_key(key)}", roles=roles, tenant_id=tenant_id)
     return contexts
 
 
