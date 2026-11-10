@@ -84,6 +84,11 @@ curl -X POST http://localhost:8000/upload \
   -F "file=@data/raw/security-policy.md"
 ```
 
+The server-side `POST /ingest` endpoint accepts local file paths and requires an
+authenticated global `admin` role. Workspace/organization admins should use the
+workspace-scoped upload flow. Local ingestion scripts do not require an HTTP key.
+Original source downloads enforce the same document roles as retrieval.
+
 The local demo at `http://localhost:8000/demo` includes the same upload flow
 and clears the query cache after a successful index.
 

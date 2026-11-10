@@ -48,7 +48,7 @@ from src.rag.observability import (
 from src.rag.performance import build_query_cache, estimate_llm_cost
 from src.rag.citations import productize_answer_citations, productize_citations
 from src.rag.reranking import build_reranker
-from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, retrieve_by_mode, select_retrieval_strategy
+from src.rag.retrieval import DEFAULT_TOP_K, load_vectorstore, metadata_access_allowed, retrieve_by_mode, select_retrieval_strategy
 from src.rag.runtime_quality import score_runtime_answer
 from src.rag.security import build_rate_limiter, run_upload_scan, sanitize_upload_filename, validate_path, validate_query
 from src.rag.storage import delete_stored_file, store_uploaded_file
@@ -377,6 +377,13 @@ def _ensure_account_context(context: AuthContext) -> AuthContext:
 def _admin_context(auth_context: AuthContext = Depends(_auth_context)) -> AuthContext:
     if not (auth_context.roles & {"admin", "org-admin", "workspace-admin"}):
         raise HTTPException(status_code=403, detail="admin role required")
+    return auth_context
+
+
+def _server_ingest_context(auth_context: AuthContext = Depends(_auth_context)) -> AuthContext:
+    # This endpoint accepts server-local paths and is not scoped to a workspace.
+    if "admin" not in auth_context.roles:
+        raise HTTPException(status_code=403, detail="global admin role required for server-side ingestion")
     return auth_context
 
 
@@ -1383,7 +1390,7 @@ def open_source(path: str, auth_context: AuthContext = Depends(_auth_context)):
     allowed_paths = {
         _safe_api_path(record["source_path"])
         for record in _document_records(_tenant_scoped_workspace_id(None, auth_context))
-        if record.get("source_path")
+        if record.get("source_path") and metadata_access_allowed(record, auth_context.roles)
     }
     if source_path not in allowed_paths:
         raise HTTPException(status_code=404, detail="source file not found")
@@ -1391,7 +1398,7 @@ def open_source(path: str, auth_context: AuthContext = Depends(_auth_context)):
 
 
 @router.post("/ingest", response_model=IngestResponse)
-def ingest(request: IngestRequest):
+def ingest(request: IngestRequest, auth_context: AuthContext = Depends(_server_ingest_context)):
     try:
         pdf_path = _safe_api_path(request.pdf_path)
         persist_dir = _safe_api_path(request.persist_dir)
