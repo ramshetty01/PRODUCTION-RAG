@@ -443,6 +443,7 @@ async function refreshEvaluation() {
     evalCitations.textContent = percent(payload.metrics?.citation_coverage);
     evalRefusals.textContent = percent(payload.metrics?.refusal_accuracy);
     evalDataset.textContent = `${payload.dataset?.verified_cases || 0}/${payload.dataset?.total_cases || 0}`;
+    document.querySelector("#evalNote").textContent = payload.note || "Semantic quality is not measured without actual predictions and judgments.";
   } catch {
     evalStatus.textContent = "Offline";
     evalStatus.className = "pill error";

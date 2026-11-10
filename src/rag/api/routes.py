@@ -190,6 +190,8 @@ class LLMHealthResponse(BaseModel):
 
 
 class EvaluationResponse(BaseModel):
+    note: str = ""
+    prediction_cases: int = 0
     generated_at: str
     dataset: dict
     config: dict

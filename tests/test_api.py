@@ -593,6 +593,8 @@ def test_evaluation_endpoint_returns_dashboard_metrics(monkeypatch):
     assert body["metrics"]["citation_coverage"] is None
     assert body["metrics"]["refusal_accuracy"] is None
     assert body["dataset"]["total_cases"] >= 66
+    assert body["prediction_cases"] == 0
+    assert "not proof of independent review" in body["note"]
 
 
 def test_evaluation_endpoint_requires_admin_in_production(monkeypatch):

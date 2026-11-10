@@ -57,7 +57,7 @@ Legacy prefix-based identities are not reused after upgrade.
 - #302 / PR #308: isolated physical upload/document identities across users/workspaces and
   retained display filenames during reindex.
 - #303 / PR #309: removed API-key prefix identity collisions; 272 tests pass at this milestone.
-- #304: replaced the misleading reference-answer evaluation path with explicit prediction
+- #304 / PR #312: replaced the misleading reference-answer evaluation path with explicit prediction
   diagnostics and unavailable semantic metrics when no actual judgments exist.
 - Earlier local integration smoke used real Chroma with hash embeddings and extractive
   generation: upload → query → cited answer → source download passed. This is not neural
