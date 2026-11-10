@@ -1774,6 +1774,7 @@ def reindex_document(
             chunk.metadata["workspace_id"] = workspace
     for chunk in chunks:
         chunk.metadata["access_roles"] = access_roles
+        chunk.metadata["filename"] = record.get("filename") or source_path.name
 
     vectorstore = build_vector_db(
         chunks,
