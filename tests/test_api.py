@@ -1628,6 +1628,11 @@ def test_scheduled_retention_deletes_expired_documents_and_audits(tmp_path, monk
     )
     monkeypatch.setattr(routes, "AUTH_CONTEXTS", routes.parse_api_keys("admin-key:public|admin"))
     monkeypatch.setattr(routes, "load_vectorstore", lambda persist_dir, **_kwargs: vectorstore)
+    retention_run = routes._run_scheduled_retention
+    monkeypatch.setattr(
+        routes, "_run_scheduled_retention",
+        lambda *args, **kwargs: retention_run(*args, now=datetime(2026, 7, 15, tzinfo=UTC), **kwargs),
+    )
     client = TestClient(routes.create_app())
 
     blocked = client.post("/retention/run")
