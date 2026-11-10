@@ -45,7 +45,7 @@ python evals/run_ragas.py --config configs/settings.toml
 python scripts/load_test.py http://localhost:8000 --requests-per-endpoint 25 --concurrency 8
 ```
 
-Say: "Every quality claim is backed by tests or a report: faithfulness, citation coverage, refusal accuracy, latency, cache behavior, and rate-limit signals."
+Say: "The dashboard distinguishes unmeasured semantic quality from actual recorded prediction diagnostics. Tests verify code behavior; they do not establish real-world faithfulness or production latency."
 
 ## 2:35 - 3:20 Production Architecture
 

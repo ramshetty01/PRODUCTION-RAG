@@ -8,13 +8,13 @@ def test_build_evaluation_report_exposes_reviewer_metrics():
 
     assert report["dataset"]["total_cases"] >= 66
     assert report["dataset"]["verified_cases"] == report["dataset"]["total_cases"]
-    assert report["metrics"]["faithfulness"] == 1.0
-    assert report["metrics"]["citation_coverage"] == 1.0
-    assert report["metrics"]["refusal_accuracy"] == 1.0
-    assert report["metrics"]["latency_budget_pass"] is True
-    assert report["quality_gate"]["passed"] is True
-    assert "faithfulness passed" in report["quality_gate"]["message"]
-    assert report["case_scores"]
+    assert report["metrics"]["faithfulness"] is None
+    assert report["metrics"]["citation_coverage"] is None
+    assert report["metrics"]["refusal_accuracy"] is None
+    assert report["metrics"]["latency_budget_pass"] is None
+    assert report["quality_gate"]["passed"] is None
+    assert "not measured" in report["quality_gate"]["message"]
+    assert report["case_scores"] == []
 
 
 def test_export_evaluation_report_writes_dashboard_json(tmp_path):
@@ -31,5 +31,5 @@ def test_export_evaluation_report_writes_dashboard_json(tmp_path):
         sys.argv = original_argv
 
     report = json.loads(output.read_text(encoding="utf-8"))
-    assert report["quality_gate"]["passed"] is True
-    assert report["metrics"]["refusal_accuracy"] == 1.0
+    assert report["quality_gate"]["passed"] is None
+    assert report["metrics"]["refusal_accuracy"] is None

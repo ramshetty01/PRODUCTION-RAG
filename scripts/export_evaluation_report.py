@@ -9,7 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from evals.run_ragas import DEFAULT_CONFIG, DEFAULT_DATASET
+from evals.run_ragas import DEFAULT_CONFIG, DEFAULT_DATASET, load_dataset
 from src.rag.evaluation_report import build_evaluation_report
 
 
@@ -18,13 +18,14 @@ def parse_args():
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET))
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
     parser.add_argument("--mode", choices=["deterministic", "ragas", "auto"], default=None)
+    parser.add_argument("--predictions", help="JSONL actual pipeline outputs")
     parser.add_argument("--output", default="reports/evaluation-dashboard.json")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    report = build_evaluation_report(args.dataset, args.config, mode=args.mode)
+    report = build_evaluation_report(args.dataset, args.config, mode=args.mode, predictions=load_dataset(args.predictions) if args.predictions else None)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")

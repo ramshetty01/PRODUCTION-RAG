@@ -13,20 +13,6 @@ from evals.run_ragas import (
     load_quality_threshold,
     quality_gate,
 )
-from src.rag.performance import check_latency_budget
-
-
-def _refusal_accuracy(cases: list[dict]) -> float:
-    refusal_cases = [case for case in cases if case.get("category") == "refusal"]
-    if not refusal_cases:
-        return 0.0
-    correct = sum(
-        1
-        for case in refusal_cases
-        if "not available in the retrieved context" in case.get("expected_answer", "").lower()
-        and case.get("verified") is True
-    )
-    return correct / len(refusal_cases)
 
 
 def _category_counts(cases: list[dict]) -> dict:
@@ -37,13 +23,14 @@ def build_evaluation_report(
     dataset_path: str | Path = DEFAULT_DATASET,
     config_path: str | Path = DEFAULT_CONFIG,
     mode: str | None = None,
+    predictions: list[dict] | None = None,
 ) -> dict:
     dataset_path = Path(dataset_path)
     config_path = Path(config_path)
     cases = load_dataset(dataset_path)
     eval_mode = mode or load_eval_mode(config_path)
     min_faithfulness = load_quality_threshold(config_path)
-    metrics = evaluate_dataset_by_mode(cases, mode=eval_mode)
+    metrics = evaluate_dataset_by_mode(cases, mode=eval_mode, predictions=predictions)
     passed, message = quality_gate(metrics, min_faithfulness)
 
     latency_budget_ms = 2000
@@ -66,12 +53,17 @@ def build_evaluation_report(
             "context_precision": metrics["context_precision"],
             "answer_relevance": metrics["answer_relevance"],
             "citation_coverage": metrics["citation_coverage"],
-            "refusal_accuracy": _refusal_accuracy(cases),
-            "latency_budget_pass": check_latency_budget("retrieval", latency_budget_ms),
+            "refusal_accuracy": metrics["refusal_accuracy"],
+            "latency_budget_pass": metrics["latency_budget_pass"],
+            "lexical_support_proxy": metrics["lexical_support_proxy"],
+            "reference_token_recall": metrics["reference_token_recall"],
         },
         "quality_gate": {
-            "passed": passed,
+            "passed": passed if metrics["faithfulness"] is not None else None,
+            "status": "evaluated" if metrics["faithfulness"] is not None else "not_evaluated",
             "message": message,
         },
+        "prediction_cases": metrics["prediction_cases"],
+        "note": metrics["note"],
         "case_scores": metrics.get("case_scores", []),
     }

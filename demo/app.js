@@ -425,6 +425,7 @@ function parseMetric(body, metricName) {
 }
 
 function percent(value) {
+  if (value === null || value === undefined) return "Not measured";
   const numeric = Number(value);
   return Number.isFinite(numeric) ? `${Math.round(numeric * 100)}%` : "-";
 }
@@ -436,7 +437,7 @@ async function refreshEvaluation() {
     if (!response.ok) {
       throw recoveryError(response.status, payload);
     }
-    evalStatus.textContent = payload.quality_gate?.passed ? "Passing" : "Failing";
+    evalStatus.textContent = payload.quality_gate?.passed == null ? "Not evaluated" : (payload.quality_gate.passed ? "Passing" : "Failing");
     evalStatus.className = `pill ${payload.quality_gate?.passed ? "" : "error"}`.trim();
     evalFaithfulness.textContent = percent(payload.metrics?.faithfulness);
     evalCitations.textContent = percent(payload.metrics?.citation_coverage);

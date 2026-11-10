@@ -588,10 +588,10 @@ def test_evaluation_endpoint_returns_dashboard_metrics(monkeypatch):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["quality_gate"]["passed"] is True
-    assert body["metrics"]["faithfulness"] == 1.0
-    assert body["metrics"]["citation_coverage"] == 1.0
-    assert body["metrics"]["refusal_accuracy"] == 1.0
+    assert body["quality_gate"]["passed"] is None
+    assert body["metrics"]["faithfulness"] is None
+    assert body["metrics"]["citation_coverage"] is None
+    assert body["metrics"]["refusal_accuracy"] is None
     assert body["dataset"]["total_cases"] >= 66
 
 
@@ -605,7 +605,7 @@ def test_evaluation_endpoint_requires_admin_in_production(monkeypatch):
 
     assert blocked.status_code == 401
     assert allowed.status_code == 200
-    assert allowed.json()["quality_gate"]["passed"] is True
+    assert allowed.json()["quality_gate"]["passed"] is None
 
 
 def test_upload_endpoint_saves_chunks_and_updates_manifest(tmp_path, monkeypatch):
