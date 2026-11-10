@@ -1,17 +1,18 @@
 # Production RAG
 
-Production RAG is a local-first retrieval augmented generation pipeline for
-ingesting documents, chunking them, storing embeddings in ChromaDB, retrieving
-evidence, and serving cited answers through a FastAPI API.
+**Document retrieval with workspace-aware access, cited answers and explicit evaluation evidence.**
 
-## Reviewer Path
+Ingest documents, retrieve authorized evidence from Chroma and serve cited answers through a FastAPI service and browser demo.
 
-- HR or hiring manager: open [Portfolio Guide](docs/PORTFOLIO.md), then watch
-  the flow in [Demo Video Script](docs/DEMO_VIDEO_SCRIPT.md).
-- Technical reviewer: start with [Architecture Diagram](docs/ARCHITECTURE_DIAGRAM.md),
-  then read [Architecture](docs/ARCHITECTURE.md), [Testing Strategy](docs/TESTING.md),
-  [Deployment](docs/DEPLOYMENT.md), and [Vector Database Selection](docs/VECTOR_DB_SELECTION.md).
-- Visual preview: [Demo Frontend Screenshot Asset](docs/assets/demo-frontend.svg).
+[![CI](https://github.com/ramshetty01/PRODUCTION-RAG/actions/workflows/rag-eval.yml/badge.svg)](https://github.com/ramshetty01/PRODUCTION-RAG/actions/workflows/rag-eval.yml)
+
+**Stack:** Python · FastAPI · LangChain · Chroma · HTML/CSS/JavaScript.
+
+**Status:** Tested local application. Transactional document updates, stale-vector recovery and independent quality evaluation remain open.
+
+[Project brief](docs/PROJECT_BRIEF.md) · [Technical portfolio](https://github.com/ramshetty01/ramshetty01/blob/main/PROJECT_PORTFOLIO.md) · [Issues](https://github.com/ramshetty01/PRODUCTION-RAG/issues)
+
+For a deeper walkthrough, see the [architecture](docs/ARCHITECTURE.md), [testing strategy](docs/TESTING.md) and [demo walkthrough script](docs/DEMO_VIDEO_SCRIPT.md).
 
 ## Requirements
 
