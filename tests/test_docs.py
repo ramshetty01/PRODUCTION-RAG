@@ -54,7 +54,7 @@ def test_readme_contains_portfolio_demo_walkthrough():
     assert "python scripts/query.py \"What evidence is required before vendor onboarding?\"" in readme
     assert '"retrieval_mode":"hybrid"' in readme
     assert "The answer is not available in the retrieved context." in readme
-    assert "faithfulness passed: 1.00 >= 0.90" in readme
+    assert "faithfulness not measured; quality gate not evaluated" in readme
     assert "python scripts/export_evaluation_report.py" in readme
     assert "/evaluation" in readme
     assert "RAG_API_KEYS=public-key:public,admin-key:public|admin" in readme

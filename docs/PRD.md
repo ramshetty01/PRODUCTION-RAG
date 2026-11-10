@@ -68,7 +68,7 @@ Tracking:
 - [#10 CI/CD evaluation workflow](https://github.com/ramshetty01/PRODUCTION-RAG/issues/10)
 - [#11 Build-fail quality gate](https://github.com/ramshetty01/PRODUCTION-RAG/issues/11)
 
-Success metric: CI fails when faithfulness drops below the configured threshold.
+Target metric: semantic faithfulness from actual predictions should meet a declared threshold. Current CI validates reference structure and code contracts only; it does not measure model faithfulness. See EVALUATION.md.
 
 ### Phase 4: Production Operations and Security
 

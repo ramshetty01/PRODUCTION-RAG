@@ -20,7 +20,7 @@ For a visual overview, see [Architecture Diagram](ARCHITECTURE_DIAGRAM.md).
 11. `src/rag/observability.py`, `src/rag/monitoring.py`, and
     `src/rag/performance.py` capture traces, feedback, metrics, cache behavior,
     and cost estimates.
-12. `evals/run_ragas.py` scores the golden dataset and enforces quality gates in
+12. `evals/run_ragas.py` validates the reference fixture and scores explicit actual predictions in
     CI.
 
 ## Module Map
@@ -72,4 +72,4 @@ python -m pytest
 python evals/run_ragas.py --config configs/settings.toml
 ```
 
-The evaluation gate fails when faithfulness is below the configured threshold.
+The default command validates fixture structure, not model quality. Semantic faithfulness remains unmeasured without explicit prediction/judge evidence; `--require-quality-gate` fails when that evidence is absent.

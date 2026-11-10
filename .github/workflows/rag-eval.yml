@@ -34,6 +34,6 @@ jobs:
         run: |
           python -m pytest
 
-      - name: Run offline RAG evaluation
+      - name: Validate reference fixture (not a model-quality gate)
         run: |
           python evals/run_ragas.py --config configs/settings.toml

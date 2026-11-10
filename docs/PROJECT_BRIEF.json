@@ -1,0 +1,90 @@
+{
+  "project": "PRODUCTION-RAG",
+  "repository": "https://github.com/ramshetty01/PRODUCTION-RAG",
+  "status": "Local application under hardening; PRs 306\u2013309 merged, evaluation correction tracked in PR312; not validated public production",
+  "purpose": "Ingest documents, retrieve role/workspace-filtered evidence and return cited answers.",
+  "stack": [
+    "Python 3.11+",
+    "FastAPI/Uvicorn/Pydantic",
+    "LangChain loaders and splitters",
+    "Chroma",
+    "Hash embeddings (default)",
+    "Optional Hugging Face embeddings",
+    "Keyword/vector hybrid retrieval",
+    "Optional rerankers and model clients",
+    "JSON manifest",
+    "HTML/CSS/JavaScript demo",
+    "pytest",
+    "GitHub Actions"
+  ],
+  "workflow": [
+    "Authenticate and authorize role/workspace",
+    "Unique upload quarantine/source identity",
+    "Parse and chunk documents",
+    "Embed and persist vectors plus manifest",
+    "Retrieve authorized candidates and rerank",
+    "Generate answer or refusal with citation metadata",
+    "Check roles again for original source download"
+  ],
+  "changes": [
+    "Global-admin ingestion and document-role source-download checks",
+    "Unique upload identities and preserved display filenames",
+    "Complete-key opaque identity fingerprints",
+    "Clock-independent retention test",
+    "Explicit actual-prediction evaluation; unavailable semantic metrics rather than gold-fed pass"
+  ],
+  "verification": {
+    "tests_passed": 276,
+    "command": ".venv/bin/python -m pytest -q",
+    "javascript_syntax": "node --check demo/app.js passes",
+    "evaluation_cli": "66 reference cases validate; semantic metrics remain null; --require-quality-gate fails without measured semantic quality",
+    "prior_local_smoke": "Real Chroma with hash embeddings and extractive generation: upload/query/citation/source download",
+    "paid_provider_calls": false,
+    "live_ragas_judge_validated": false
+  },
+  "pull_requests": [
+    306,
+    307,
+    308,
+    309,
+    312
+  ],
+  "issues_addressed": [
+    301,
+    302,
+    303,
+    304,
+    305
+  ],
+  "remaining_issues": [
+    {
+      "number": 310,
+      "gap": "Nontransactional manifest concurrent mutation/crash recovery"
+    },
+    {
+      "number": 311,
+      "gap": "Stale vector version replacement and partial failure recovery"
+    }
+  ],
+  "production_blockers": [
+    "Serialize document mutations for local evaluation; do not assume single process eliminates thread races",
+    "Transactional manifest/vector/object lifecycle",
+    "Pinned and audited runtime dependencies",
+    "Independent held-out quality evaluation",
+    "Validated external model and identity integrations",
+    "Distributed quota/cache configuration",
+    "TLS and network policy",
+    "Deployed load and recovery evidence"
+  ],
+  "resume_bullets": [
+    "Hardened FastAPI/Chroma ingestion and source-download authorization across role/workspace boundaries.",
+    "Added API-key prefix-collision and conversation-isolation regressions using opaque complete-key fingerprints.",
+    "Removed reference-answer evaluation leakage and made missing semantic evidence explicit."
+  ],
+  "merged_pull_requests": [
+    306,
+    307,
+    308,
+    309
+  ]
+}

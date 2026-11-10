@@ -297,32 +297,36 @@ Expected answer shape:
 The answer is not available in the retrieved context.
 ```
 
-Run the quality gate:
+Validate the reference fixture (no model calls or model-quality claim):
 
 ```bash
 python evals/run_ragas.py --config configs/settings.toml
 ```
 
-Export the same metrics shown in the browser quality dashboard:
+Expected output includes `"status": "not_run"`, `"faithfulness": null` and
+`faithfulness not measured; quality gate not evaluated`. Success means the fixture
+validated, not that current prompts, retrieval or generation met a quality threshold.
+The fixture's `verified` flags are inherited metadata, not evidence of independent
+human review.
+
+To inspect recorded **actual pipeline outputs**, provide JSONL records containing
+`id`, `answer`, `contexts` and `citations` (plus optional `refused` and measured
+`retrieval_ms`):
 
 ```bash
-python scripts/export_evaluation_report.py --output reports/evaluation-dashboard.json
+python evals/run_ragas.py --predictions predictions.jsonl --output report.json
+python scripts/export_evaluation_report.py --predictions predictions.jsonl --output reports/evaluation-dashboard.json
 ```
 
-Expected output includes:
-
-```text
-RAG evaluation report
-mode=deterministic
-faithfulness=1.00
-faithfulness passed: 1.00 >= 0.90
-```
-
-The `/demo` quality panel and `/evaluation` endpoint summarize faithfulness,
-citation coverage, refusal accuracy, retrieval latency budget status, and the
-golden dataset size. For HR or hiring-manager demos, interpret a passing status
-as evidence that the current prompts, retrieval settings, and corpus still meet
-the committed quality threshold.
+Deterministic mode reports lexical-support/reference-token proxies and citation
+presence, not semantic faithfulness. Missing predictions remain in denominators.
+The `/demo` quality panel and `/evaluation` endpoint show **Not evaluated** when
+actual semantic judgments are absent; they no longer display gold-reference checks
+as current model quality. `--require-quality-gate` exits nonzero when no semantic
+faithfulness metric exists. Optional `--mode ragas --predictions ...` explicitly
+uses a configured external judge and may incur provider charges; it has not been
+live-validated in this maintenance run. `auto` performs offline diagnostics only.
+See [evaluation provenance and prediction contract](docs/EVALUATION.md).
 
 To demonstrate protected retrieval, start the API with demo keys such as
 `RAG_API_KEYS=public-key:public,admin-key:public|admin`. In `/demo`, choose the

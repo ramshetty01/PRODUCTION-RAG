@@ -32,7 +32,7 @@ The production layer adds API contracts, prompt versioning, citation enforcement
 ## Resume Bullets
 
 - Built a production-style RAG platform with FastAPI, Chroma/Qdrant vector backends, hybrid retrieval, reranking, citation enforcement, and refusal behavior for unsupported claims.
-- Implemented enterprise AI quality gates with a verified golden dataset, deterministic/Ragas-compatible evaluation, quality dashboard, and CI-ready faithfulness thresholds.
+- Implemented reference-fixture validation and explicit prediction diagnostics; semantic faithfulness is unmeasured until actual predictions are assessed by an external judge and independently reviewed.
 - Added production controls including API key/JWT auth, role-aware retrieval, cache isolation, rate limiting, OpenTelemetry tracing, Prometheus metrics, and load-test reporting.
 - Packaged the system for deployment with Docker, Render, Kubernetes manifests, environment-based configuration, managed vector store setup, and reviewer-focused demo documentation.
 
